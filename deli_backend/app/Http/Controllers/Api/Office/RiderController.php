@@ -78,8 +78,21 @@ class RiderController extends Controller
             return $rider['latitude'] !== null && $rider['longitude'] !== null;
         })->values();
 
-        return response()->json([
+        // Ensure response is properly formatted for Render
+        $response = response()->json([
             'riders' => $locations,
+        ], 200, [
+            'Content-Type' => 'application/json; charset=utf-8',
         ]);
+        
+        // Verify response has content
+        if (empty($response->getContent())) {
+            \Illuminate\Support\Facades\Log::error('RiderController::locations: Response content is empty!');
+            return response()->json([
+                'riders' => [],
+            ], 200);
+        }
+        
+        return $response;
     }
 }

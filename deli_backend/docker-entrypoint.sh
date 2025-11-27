@@ -8,15 +8,18 @@ php artisan config:clear || true
 php artisan route:clear || true
 php artisan view:clear || true
 
-# Cache Laravel configuration (with error handling)
+# IMPORTANT: Don't cache routes in production to avoid stale route issues
+# Route caching can cause issues with dynamic responses
+# Cache only config and views, but NOT routes
 echo "Caching Laravel configuration..."
 php artisan config:cache || {
     echo "ERROR: Failed to cache config. Continuing anyway..."
     php artisan config:clear || true
 }
-php artisan route:cache || {
-    echo "WARNING: Failed to cache routes. Continuing anyway..."
-}
+# Skip route caching - let routes load dynamically
+# php artisan route:cache || {
+#     echo "WARNING: Failed to cache routes. Continuing anyway..."
+# }
 php artisan view:cache || {
     echo "WARNING: Failed to cache views. Continuing anyway..."
 }

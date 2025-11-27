@@ -187,6 +187,12 @@
             // Get response text first to check if it's empty
             const text = await res.text();
             
+            // Log the actual response for debugging
+            console.log('Response status:', res.status);
+            console.log('Response headers:', [...res.headers.entries()]);
+            console.log('Response text length:', text.length);
+            console.log('Response text (first 500 chars):', text.substring(0, 500));
+            
             if (!res.ok) {
                 // Try to parse as JSON, fallback to text
                 let errorMessage = 'Failed to assign rider';
@@ -199,17 +205,26 @@
                 throw new Error(errorMessage);
             }
             
-            // Check if response is empty
-            if (!text || text.trim() === '') {
+            // Check if response is empty or just whitespace
+            const trimmedText = text.trim();
+            if (!trimmedText) {
+                console.error('Response is empty or only whitespace');
                 throw new Error('Empty response from server');
             }
             
             // Try to parse JSON
             try {
-                return JSON.parse(text);
+                const data = JSON.parse(trimmedText);
+                console.log('Parsed JSON successfully:', data);
+                return data;
             } catch (e) {
-                console.error('Response text:', text);
-                throw new Error('Invalid JSON response from server');
+                console.error('Failed to parse JSON. Response text:', trimmedText);
+                console.error('Parse error:', e);
+                // If it looks like HTML, it might be an error page
+                if (trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<html')) {
+                    throw new Error('Server returned HTML instead of JSON. Check server logs.');
+                }
+                throw new Error('Invalid JSON response: ' + e.message);
             }
         })
         .then(data => {

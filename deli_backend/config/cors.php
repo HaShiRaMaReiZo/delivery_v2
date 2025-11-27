@@ -24,6 +24,8 @@ return [
         'http://127.0.0.1:8000',
         'http://localhost:*',
         'http://127.0.0.1:*',
+        'https://ok-delivery.onrender.com',
+        env('APP_URL'),
     ],
 
     'allowed_origins_patterns' => [],

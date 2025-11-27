@@ -90,12 +90,31 @@ class PackageController extends Controller
 
     public function assign(Request $request, $id)
     {
-        $request->validate([
-            'rider_id' => 'required|exists:riders,id',
-        ]);
+        try {
+            Log::info('assign: Starting', [
+                'package_id' => $id,
+                'rider_id' => $request->rider_id,
+                'user_id' => $request->user()->id,
+            ]);
 
-        $package = Package::findOrFail($id);
-        $rider = \App\Models\Rider::findOrFail($request->rider_id);
+            // Clear any previous output
+            if (ob_get_level()) {
+                ob_clean();
+            }
+
+            $request->validate([
+                'rider_id' => 'required|exists:riders,id',
+            ]);
+
+            Log::info('assign: Validation passed');
+
+            $package = Package::findOrFail($id);
+            $rider = \App\Models\Rider::findOrFail($request->rider_id);
+
+            Log::info('assign: Package and rider found', [
+                'package_status' => $package->status,
+                'rider_name' => $rider->name,
+            ]);
 
         // Determine assignment type based on current status
         // Delivery assignments: packages that are 'arrived_at_office' (ready to be assigned for delivery)
@@ -136,16 +155,64 @@ class PackageController extends Controller
             'created_at' => now(),
         ]);
 
-        // Broadcast status change via WebSocket
-        event(new PackageStatusChanged($package->id, $package->status, $package->merchant_id));
+        // Broadcast status change via WebSocket (wrap in try-catch to prevent breaking response)
+        try {
+            event(new PackageStatusChanged($package->id, $package->status, $package->merchant_id));
+        } catch (\Exception $e) {
+            Log::warning('Failed to broadcast package status change event', [
+                'package_id' => $package->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
-        return response()->json([
+        $responseData = [
             'message' => $isDeliveryAssignment 
                 ? 'Package assigned for delivery successfully'
                 : 'Package assigned for pickup successfully',
             'assignment_type' => $assignmentType,
             'package' => $package->load(['merchant', 'currentRider', 'statusHistory']),
+        ];
+
+        Log::info('assign: Sending success response', [
+            'assignment_type' => $assignmentType,
         ]);
+
+        // Create and return JSON response
+        return response()->json($responseData, 200, [
+            'Content-Type' => 'application/json',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422)->header('Content-Type', 'application/json');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Package or rider not found',
+                'error' => $e->getMessage(),
+            ], 404)->header('Content-Type', 'application/json');
+        } catch (\Exception $e) {
+            // Ensure no output before error response
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+            
+            Log::error('Error assigning rider to package', [
+                'package_id' => $id,
+                'rider_id' => $request->rider_id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to assign rider',
+                'error' => $e->getMessage(),
+            ], 500, [
+                'Content-Type' => 'application/json',
+            ]);
+        }
     }
 
     public function bulkAssign(Request $request)
@@ -226,24 +293,38 @@ class PackageController extends Controller
     public function assignPickupByMerchant(Request $request, $merchantId)
     {
         try {
-            // Clear any previous output
-            if (ob_get_level()) {
-                ob_clean();
-            }
+            Log::info('assignPickupByMerchant: Starting', [
+                'merchant_id' => $merchantId,
+                'rider_id' => $request->rider_id,
+                'user_id' => $request->user()->id,
+            ]);
 
             $request->validate([
                 'rider_id' => 'required|exists:riders,id',
             ]);
 
+            Log::info('assignPickupByMerchant: Validation passed');
+
             $rider = \App\Models\Rider::findOrFail($request->rider_id);
             $merchant = \App\Models\Merchant::findOrFail($merchantId);
+
+            Log::info('assignPickupByMerchant: Rider and merchant found', [
+                'rider_name' => $rider->name,
+                'merchant_name' => $merchant->business_name,
+            ]);
 
             // Get all registered packages from this merchant
             $packages = Package::where('merchant_id', $merchantId)
                 ->where('status', 'registered')
                 ->get();
 
+            Log::info('assignPickupByMerchant: Found packages', [
+                'count' => $packages->count(),
+                'package_ids' => $packages->pluck('id')->toArray(),
+            ]);
+
             if ($packages->isEmpty()) {
+                Log::warning('assignPickupByMerchant: No registered packages found');
                 return response()->json([
                     'message' => 'No registered packages found for this merchant',
                     'assigned_count' => 0,
@@ -254,12 +335,24 @@ class PackageController extends Controller
 
             DB::beginTransaction();
             try {
+                Log::info('assignPickupByMerchant: Starting transaction');
                 foreach ($packages as $package) {
+                    Log::info('assignPickupByMerchant: Processing package', [
+                        'package_id' => $package->id,
+                        'tracking_code' => $package->tracking_code,
+                    ]);
+
                     // Update package - assign for pickup
                     $package->current_rider_id = $rider->id;
-                    $package->status = 'assigned_to_rider'; // Status for pickup assignment
+                    $package->status = 'assigned_to_rider';
                     $package->assigned_at = now();
                     $package->save();
+
+                    Log::info('assignPickupByMerchant: Package updated', [
+                        'package_id' => $package->id,
+                        'status' => $package->status,
+                        'rider_id' => $package->current_rider_id,
+                    ]);
 
                     // Create assignment record
                     RiderAssignment::create([
@@ -267,7 +360,7 @@ class PackageController extends Controller
                         'rider_id' => $rider->id,
                         'assigned_by_user_id' => $request->user()->id,
                         'assigned_at' => now(),
-                        'status' => 'assigned', // Assignment status
+                        'status' => 'assigned',
                     ]);
 
                     // Log status history
@@ -284,7 +377,6 @@ class PackageController extends Controller
                     try {
                         event(new PackageStatusChanged($package->id, 'assigned_to_rider', $package->merchant_id));
                     } catch (\Exception $eventException) {
-                        // Log but don't fail the assignment if event fails
                         Log::warning('Failed to broadcast package status change event', [
                             'package_id' => $package->id,
                             'error' => $eventException->getMessage(),
@@ -294,8 +386,15 @@ class PackageController extends Controller
                     $assigned[] = $package->id;
                 }
                 DB::commit();
+                Log::info('assignPickupByMerchant: Transaction committed', [
+                    'assigned_count' => count($assigned),
+                ]);
             } catch (\Exception $e) {
                 DB::rollBack();
+                Log::error('assignPickupByMerchant: Transaction failed', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
                 throw $e;
             }
 
@@ -315,14 +414,25 @@ class PackageController extends Controller
                 'assigned_package_ids' => $assigned,
             ];
 
-            // Ensure no output before response
-            if (ob_get_level()) {
-                ob_end_clean();
-            }
+            Log::info('assignPickupByMerchant: Sending success response', [
+                'assigned_count' => count($assigned),
+            ]);
 
-            return response()->json($responseData, 200, [
-                'Content-Type' => 'application/json',
+            // Create response - ensure it's properly formatted for Render
+            // Use json_encode directly to ensure clean JSON output
+            $jsonContent = json_encode($responseData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            
+            Log::info('assignPickupByMerchant: Response JSON created', [
+                'json_length' => strlen($jsonContent),
+                'json_preview' => substr($jsonContent, 0, 200),
+            ]);
+            
+            // Return response with explicit content
+            return response($jsonContent, 200, [
+                'Content-Type' => 'application/json; charset=utf-8',
+                'Content-Length' => strlen($jsonContent),
                 'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'X-Content-Type-Options' => 'nosniff',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -335,11 +445,6 @@ class PackageController extends Controller
                 'error' => $e->getMessage(),
             ], 404)->header('Content-Type', 'application/json');
         } catch (\Exception $e) {
-            // Ensure no output before error response
-            if (ob_get_level()) {
-                ob_end_clean();
-            }
-            
             Log::error('Error assigning pickup by merchant', [
                 'merchant_id' => $merchantId,
                 'rider_id' => $request->rider_id ?? null,
@@ -350,9 +455,7 @@ class PackageController extends Controller
             return response()->json([
                 'message' => 'Failed to assign rider for pickup',
                 'error' => $e->getMessage(),
-            ], 500, [
-                'Content-Type' => 'application/json',
-            ]);
+            ], 500)->header('Content-Type', 'application/json');
         }
     }
 

@@ -17,21 +17,40 @@ class PackageController extends Controller
     {
         $rider = $request->user()->rider;
         
-        // Only return packages that are actively assigned to the rider
-        // Exclude completed/delivered/returned packages
-        // Note: contact_failed packages are automatically reassigned (status becomes arrived_at_office)
-        // Only cancelled packages need to be returned to office
-        $packages = Package::where('current_rider_id', $rider->id)
-            ->whereIn('status', [
-                'assigned_to_rider',  // For pickup from merchant OR assigned for delivery (need to receive from office)
-                'picked_up',          // Picked up from merchant (legacy, for backward compatibility)
-                'ready_for_delivery', // Received from office, ready to start delivery
-                'on_the_way',        // Currently being delivered
-                'cancelled'          // Cancelled, rider needs to return to office
-            ])
-            ->with(['merchant', 'statusHistory'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // Check if we need to include delivered packages
+        $includeDelivered = $request->query('include_delivered', 'false') === 'true' || $request->query('include_delivered') === true;
+        
+        if ($includeDelivered) {
+            // Return all packages including delivered ones
+            $packages = Package::where('current_rider_id', $rider->id)
+                ->whereIn('status', [
+                    'assigned_to_rider',  // For pickup from merchant OR assigned for delivery (need to receive from office)
+                    'picked_up',          // Picked up from merchant (legacy, for backward compatibility)
+                    'ready_for_delivery', // Received from office, ready to start delivery
+                    'on_the_way',        // Currently being delivered
+                    'delivered',         // Delivered packages
+                    'cancelled'          // Cancelled, rider needs to return to office
+                ])
+                ->with(['merchant', 'statusHistory'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } else {
+            // Only return packages that are actively assigned to the rider
+            // Exclude completed/delivered/returned packages
+            // Note: contact_failed packages are automatically reassigned (status becomes arrived_at_office)
+            // Only cancelled packages need to be returned to office
+            $packages = Package::where('current_rider_id', $rider->id)
+                ->whereIn('status', [
+                    'assigned_to_rider',  // For pickup from merchant OR assigned for delivery (need to receive from office)
+                    'picked_up',          // Picked up from merchant (legacy, for backward compatibility)
+                    'ready_for_delivery', // Received from office, ready to start delivery
+                    'on_the_way',        // Currently being delivered
+                    'cancelled'          // Cancelled, rider needs to return to office
+                ])
+                ->with(['merchant', 'statusHistory'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
 
         return response()->json($packages);
     }
