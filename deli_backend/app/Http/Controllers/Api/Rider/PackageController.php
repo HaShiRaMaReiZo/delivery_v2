@@ -221,35 +221,34 @@ class PackageController extends Controller
             ->findOrFail($id);
 
         if ($request->contact_result === 'failed') {
-            // Automatically change status to arrived_at_office for next day assignment
-            // Clear rider assignment so package is removed from rider's list
-            $package->status = 'arrived_at_office';
-            $package->current_rider_id = null;
-            $package->delivery_notes = $request->notes ?? 'Customer contact failed - reassigned for next day delivery';
+            // Change status to contact_failed and clear rider assignment for next day reassignment
+            $package->status = 'contact_failed';
+            $package->current_rider_id = null; // Clear rider assignment so office can reassign for next day
+            $package->delivery_notes = $request->notes ?? 'Customer contact failed - ready for next day reassignment';
             $package->save();
 
-            // Log status history - first log contact_failed, then arrived_at_office
+            // Log status history
             PackageStatusHistory::create([
                 'package_id' => $package->id,
                 'status' => 'contact_failed',
                 'changed_by_user_id' => $request->user()->id,
                 'changed_by_type' => 'rider',
-                'notes' => $request->notes ?? 'Customer contact failed',
-                'created_at' => now(),
-            ]);
-
-            // Log the automatic reassignment
-            PackageStatusHistory::create([
-                'package_id' => $package->id,
-                'status' => 'arrived_at_office',
-                'changed_by_user_id' => $request->user()->id,
-                'changed_by_type' => 'rider',
-                'notes' => 'Automatically reassigned for next day delivery after contact failed',
+                'notes' => $request->notes ?? 'Customer contact failed - ready for next day reassignment',
                 'created_at' => now(),
             ]);
 
             // Broadcast status change via WebSocket
-            event(new PackageStatusChanged($package->id, 'arrived_at_office', $package->merchant_id));
+            event(new PackageStatusChanged($package->id, 'contact_failed', $package->merchant_id));
+        } else if ($request->contact_result === 'success') {
+            // Log successful contact (status remains unchanged)
+            PackageStatusHistory::create([
+                'package_id' => $package->id,
+                'status' => $package->status, // Keep current status
+                'changed_by_user_id' => $request->user()->id,
+                'changed_by_type' => 'rider',
+                'notes' => $request->notes ?? 'Customer contact successful',
+                'created_at' => now(),
+            ]);
         }
 
         return response()->json([

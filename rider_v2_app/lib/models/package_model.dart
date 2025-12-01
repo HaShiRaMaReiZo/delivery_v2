@@ -108,11 +108,14 @@ class PackageModel {
   /// Delivery packages include:
   /// - ready_for_delivery: Received from office, ready to start delivery
   /// - on_the_way: Currently being delivered
+  /// - arrived_at_office: Arrived at office (ready to be assigned for delivery)
   /// - assigned_to_rider: If previous status was arrived_at_office (delivery assignment)
   /// - cancelled: Cancelled packages need to be returned to office
+  /// Note: picked_up status means package is in transit to office, not ready for delivery yet
   bool get isForDelivery {
     if (status == 'ready_for_delivery' ||
         status == 'on_the_way' ||
+        status == 'arrived_at_office' ||
         status == 'cancelled') {
       return true;
     }
@@ -122,16 +125,19 @@ class PackageModel {
       return _isDeliveryAssignment();
     }
 
+    // picked_up means package is in transit to office, not ready for delivery
     return false;
   }
 
   /// Check if this package is for pickup
   /// Pickup packages include:
   /// - assigned_to_rider: If previous status was NOT arrived_at_office (pickup from merchant)
-  /// - picked_up: Picked up from merchant
+  /// Note: picked_up status means pickup is complete, so it should not show in pickup section
   bool get isForPickup {
-    if (status == 'picked_up') {
-      return true;
+    // Only show packages that are assigned for pickup (not yet picked up)
+    // picked_up means the pickup is complete, so exclude it
+    if (status == 'picked_up' || status == 'arrived_at_office') {
+      return false;
     }
 
     // For assigned_to_rider, check status history to distinguish pickup vs delivery

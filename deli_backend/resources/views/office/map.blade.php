@@ -185,16 +185,29 @@
                 'Content-Type': 'application/json'
             }
         })
-        .then(res => {
+        .then(async res => {
             console.log('Response status:', res.status);
             if (!res.ok) {
                 // Log response text for debugging
-                return res.text().then(text => {
-                    console.error('Error response:', text);
-                    throw new Error(`HTTP error! status: ${res.status}, message: ${text}`);
-                });
+                const text = await res.text();
+                console.error('Error response:', text);
+                throw new Error(`HTTP error! status: ${res.status}, message: ${text || 'Unknown error'}`);
             }
-            return res.json();
+            
+            // Check if response has content
+            const text = await res.text();
+            if (!text || text.trim() === '') {
+                console.warn('Empty response received, using default data');
+                return { riders: [] };
+            }
+            
+            // Try to parse JSON
+            try {
+                return JSON.parse(text);
+            } catch (parseError) {
+                console.error('JSON parse error:', parseError, 'Response text:', text.substring(0, 200));
+                throw new Error('Invalid JSON response from server');
+            }
         })
         .then(data => {
             console.log('Rider locations data:', data);
@@ -204,7 +217,7 @@
         })
         .catch(err => {
             console.error('Error loading rider locations:', err);
-            document.getElementById('riderList').innerHTML = '<p class="text-red-500 text-center">Error loading riders: ' + err.message + '</p>';
+            document.getElementById('riderList').innerHTML = '<p class="text-red-500 text-center">Error loading riders: ' + (err.message || 'Unknown error') + '</p>';
         });
     }
 
@@ -385,7 +398,8 @@
     
     // WebSocket: Listen for real-time rider location updates
     if (window.WebSocketHelper && window.WebSocketHelper.isConnected()) {
-        const riderLocationChannel = window.WebSocketHelper.connect('office.riders.locations', 'rider.location.updated', function(data) {
+        // Use 'private-' prefix for private channels in Pusher
+        const riderLocationChannel = window.WebSocketHelper.connect('private-office.riders.locations', 'rider.location.updated', function(data) {
             // Update rider location on map in real-time
             updateRiderLocationOnMap(data);
         });
@@ -404,56 +418,15 @@
         const riderId = data.rider_id;
         const position = [parseFloat(data.longitude), parseFloat(data.latitude)];
         
-        // Update existing marker or create new one
+        // Update existing marker position smoothly
         if (markers[riderId]) {
+            // Smoothly animate marker to new position
             markers[riderId].setLngLat(position);
         } else {
-            // Create new marker if it doesn't exist with red pointer and rider name
-            const el = document.createElement('div');
-            el.style.display = 'flex';
-            el.style.flexDirection = 'column';
-            el.style.alignItems = 'center';
-            el.style.cursor = 'pointer';
-            
-            // Red pointer/marker
-            const markerDot = document.createElement('div');
-            markerDot.className = 'rider-marker';
-            markerDot.style.width = '20px';
-            markerDot.style.height = '20px';
-            markerDot.style.borderRadius = '50%';
-            markerDot.style.backgroundColor = '#ef4444'; // Red color
-            markerDot.style.border = '3px solid white';
-            markerDot.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-            
-            // Rider name label
-            const nameLabel = document.createElement('div');
-            nameLabel.textContent = data.name || 'Rider';
-            nameLabel.style.marginTop = '4px';
-            nameLabel.style.padding = '2px 6px';
-            nameLabel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            nameLabel.style.color = 'white';
-            nameLabel.style.fontSize = '11px';
-            nameLabel.style.fontWeight = '600';
-            nameLabel.style.borderRadius = '4px';
-            nameLabel.style.whiteSpace = 'nowrap';
-            nameLabel.style.textAlign = 'center';
-            nameLabel.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)';
-            
-            el.appendChild(markerDot);
-            el.appendChild(nameLabel);
-            
-            const marker = new maplibregl.Marker({
-                element: el,
-                anchor: 'bottom'
-            })
-            .setLngLat(position)
-            .addTo(map);
-            
-            markers[riderId] = marker;
+            // Marker doesn't exist yet - reload all locations to get full rider data
+            // This will create the marker with proper name and details
+            loadRiderLocations();
         }
-        
-        // Update rider list if needed
-        loadRiderLocations();
     }
 </script>
 @endpush

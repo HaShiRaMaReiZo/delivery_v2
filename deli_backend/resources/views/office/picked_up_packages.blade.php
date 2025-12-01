@@ -186,20 +186,28 @@
                 notes: 'Marked as arrived at office'
             })
         })
-        .then(res => {
+        .then(async res => {
             if (!res.ok) {
-                return res.json().then(err => {
-                    throw new Error(err.message || 'Failed to update status');
-                });
+                const errorText = await res.text().catch(() => 'Unknown error');
+                throw new Error(errorText || 'Failed to update status');
             }
-            return res.json();
-        })
-        .then(data => {
+            
+            // Check if response has content before parsing
+            const text = await res.text();
+            if (text && text.trim() !== '') {
+                try {
+                    JSON.parse(text);
+                } catch (parseError) {
+                    console.error('JSON parse error for package:', packageId, 'Response:', text.substring(0, 200));
+                    throw new Error('Invalid JSON response from server');
+                }
+            }
+            
             alert('Package marked as arrived at office successfully!');
             location.reload();
         })
         .catch(err => {
-            alert('Error updating status: ' + err.message);
+            alert('Error updating status: ' + (err.message || 'Unknown error'));
             console.error(err);
         });
     }
@@ -253,14 +261,27 @@
                     notes: 'Marked as arrived at office'
                 })
             })
-            .then(res => {
+            .then(async res => {
                 if (!res.ok) {
-                    throw new Error('Failed');
+                    const errorText = await res.text().catch(() => 'Unknown error');
+                    throw new Error(errorText || 'Failed to update package status');
                 }
+                
+                // Check if response has content before parsing
+                const text = await res.text();
+                if (text && text.trim() !== '') {
+                    try {
+                        JSON.parse(text);
+                    } catch (parseError) {
+                        console.error('JSON parse error for package:', packageId, 'Response:', text.substring(0, 200));
+                        throw new Error('Invalid JSON response from server');
+                    }
+                }
+                
                 completed++;
                 if (completed + failed === pickedUpPackages.length) {
                     if (failed > 0) {
-                        alert(`${completed} package(s) marked successfully, ${failed} failed`);
+                        alert(`${completed} package(s) marked successfully, ${failed} failed. Error: ${err.message || 'Unknown error'}`);
                     } else {
                         alert(`${completed} package(s) marked as arrived at office successfully!`);
                     }
@@ -269,9 +290,10 @@
             })
             .catch(err => {
                 failed++;
+                console.error('Error marking package as arrived:', packageId, err);
                 if (completed + failed === pickedUpPackages.length) {
                     if (failed > 0) {
-                        alert(`${completed} package(s) marked successfully, ${failed} failed`);
+                        alert(`${completed} package(s) marked successfully, ${failed} failed. Error: ${err.message || 'Unknown error'}`);
                     } else {
                         alert('All packages marked as arrived at office successfully!');
                     }
@@ -331,15 +353,23 @@
                     notes: 'Marked as arrived at office by staff (all from merchant)'
                 })
             })
-            .then(res => {
+            .then(async res => {
                 if (!res.ok) {
-                    return res.json().then(err => {
-                        throw new Error(err.message || 'Failed to update package status');
-                    });
+                    const errorText = await res.text().catch(() => 'Unknown error');
+                    throw new Error(errorText || 'Failed to update package status');
                 }
-                return res.json();
-            })
-            .then(data => {
+                
+                // Check if response has content before parsing
+                const text = await res.text();
+                if (text && text.trim() !== '') {
+                    try {
+                        JSON.parse(text);
+                    } catch (parseError) {
+                        console.error('JSON parse error for package:', packageId, 'Response:', text.substring(0, 200));
+                        throw new Error('Invalid JSON response from server');
+                    }
+                }
+                
                 completed++;
                 if (completed + failed === pickedUpPackageIds.length) {
                     if (failed > 0) {
@@ -351,13 +381,13 @@
                 }
             })
             .catch(err => {
-                console.error('Error marking package as arrived:', err);
+                console.error('Error marking package as arrived:', packageId, err);
                 failed++;
                 if (completed + failed === pickedUpPackageIds.length) {
                     if (failed > 0) {
-                        alert(`${completed} package(s) marked successfully, ${failed} failed. Error: ${err.message}`);
+                        alert(`${completed} package(s) marked successfully, ${failed} failed. Error: ${err.message || 'Unknown error'}`);
                     } else {
-                        alert('Error: ' + err.message);
+                        alert('Error: ' + (err.message || 'Unknown error'));
                     }
                     location.reload();
                 }

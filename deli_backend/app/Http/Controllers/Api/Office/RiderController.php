@@ -45,54 +45,72 @@ class RiderController extends Controller
 
     public function locations(Request $request)
     {
-        // Get all active riders with their current locations
-        // Only show riders who have sent at least one location update
-        $riders = Rider::whereNotNull('current_latitude')
-            ->whereNotNull('current_longitude')
-            ->where('status', '!=', 'offline')
-            ->select('id', 'name', 'phone', 'status', 'current_latitude', 'current_longitude', 'last_location_update')
-            ->get();
+        try {
+            // Clear any output buffers to ensure clean JSON response
+            while (ob_get_level()) {
+                ob_end_clean();
+            }
+            
+            // Get all active riders with their current locations
+            // Only show riders who have sent at least one location update
+            $riders = Rider::whereNotNull('current_latitude')
+                ->whereNotNull('current_longitude')
+                ->where('status', '!=', 'offline')
+                ->select('id', 'name', 'phone', 'status', 'current_latitude', 'current_longitude', 'last_location_update')
+                ->get();
 
-        // Get package counts in a single query to avoid N+1 problem
-        $riderIds = $riders->pluck('id')->toArray();
-        $packageCounts = \App\Models\Package::whereIn('current_rider_id', $riderIds)
-            ->whereIn('status', ['assigned_to_rider', 'picked_up', 'on_the_way'])
-            ->groupBy('current_rider_id')
-            ->selectRaw('current_rider_id, count(*) as count')
-            ->pluck('count', 'current_rider_id')
-            ->toArray();
+            // Get package counts in a single query to avoid N+1 problem
+            $riderIds = $riders->pluck('id')->toArray();
+            $packageCounts = [];
+            if (!empty($riderIds)) {
+                $packageCounts = \App\Models\Package::whereIn('current_rider_id', $riderIds)
+                    ->whereIn('status', ['assigned_to_rider', 'picked_up', 'on_the_way'])
+                    ->groupBy('current_rider_id')
+                    ->selectRaw('current_rider_id, count(*) as count')
+                    ->pluck('count', 'current_rider_id')
+                    ->toArray();
+            }
 
-        $locations = $riders->map(function ($rider) use ($packageCounts) {
-            return [
-                'rider_id' => $rider->id,
-                'name' => $rider->name,
-                'phone' => $rider->phone,
-                'status' => $rider->status,
-                'latitude' => $rider->current_latitude,
-                'longitude' => $rider->current_longitude,
-                'last_location_update' => $rider->last_location_update,
-                'package_count' => $packageCounts[$rider->id] ?? 0,
-            ];
-        })->filter(function ($rider) {
-            // Only return riders that have actual location data (for map display)
-            return $rider['latitude'] !== null && $rider['longitude'] !== null;
-        })->values();
+            $locations = $riders->map(function ($rider) use ($packageCounts) {
+                return [
+                    'rider_id' => $rider->id,
+                    'name' => $rider->name,
+                    'phone' => $rider->phone,
+                    'status' => $rider->status,
+                    'latitude' => (float) $rider->current_latitude,
+                    'longitude' => (float) $rider->current_longitude,
+                    'last_location_update' => $rider->last_location_update ? $rider->last_location_update->toIso8601String() : null,
+                    'package_count' => $packageCounts[$rider->id] ?? 0,
+                ];
+            })->filter(function ($rider) {
+                // Only return riders that have actual location data (for map display)
+                return $rider['latitude'] !== null && $rider['longitude'] !== null;
+            })->values();
 
-        // Ensure response is properly formatted for Render
-        $response = response()->json([
-            'riders' => $locations,
-        ], 200, [
-            'Content-Type' => 'application/json; charset=utf-8',
-        ]);
-        
-        // Verify response has content
-        if (empty($response->getContent())) {
-            \Illuminate\Support\Facades\Log::error('RiderController::locations: Response content is empty!');
+            // Return clean JSON response
+            return response()->json([
+                'riders' => $locations,
+            ], 200, [
+                'Content-Type' => 'application/json; charset=utf-8',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            ]);
+        } catch (\Exception $e) {
+            // Clear output buffers on error
+            while (ob_get_level()) {
+                ob_end_clean();
+            }
+            
+            \Illuminate\Support\Facades\Log::error('RiderController::locations error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             return response()->json([
                 'riders' => [],
-            ], 200);
+                'error' => 'Failed to load rider locations',
+            ], 200, [
+                'Content-Type' => 'application/json; charset=utf-8',
+            ]);
         }
-        
-        return $response;
     }
 }

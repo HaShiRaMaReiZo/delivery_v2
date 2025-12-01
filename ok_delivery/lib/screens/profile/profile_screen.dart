@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../l10n/app_localizations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/user_model.dart';
@@ -6,6 +7,8 @@ import '../../repositories/auth_repository.dart';
 import '../../repositories/package_repository.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -466,6 +469,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
           ),
+          const Divider(height: 32),
+          _buildSettingsItem(
+            context,
+            icon: Icons.logout,
+            title: AppLocalizations.of(context)!.logout,
+            onTap: () => _showLogoutDialog(context),
+            isDestructive: true,
+          ),
         ],
       ),
     );
@@ -476,7 +487,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    bool isDestructive = false,
   }) {
+    final iconColor = isDestructive ? Colors.red : AppTheme.primaryBlue;
+    final textColor = isDestructive ? Colors.red : AppTheme.black;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -487,17 +502,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.primaryBlue.withOpacity(0.1),
+                color: iconColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: AppTheme.primaryBlue, size: 20),
+              child: Icon(icon, color: iconColor, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 title,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppTheme.black,
+                  color: textColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -506,6 +521,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(AppLocalizations.of(context)!.logout),
+          content: Text(AppLocalizations.of(context)!.logoutConfirmation),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(AppLocalizations.of(context)!.cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                // Access AuthBloc from the root context
+                context.read<AuthBloc>().add(AuthLogoutRequested());
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(AppLocalizations.of(context)!.yes),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -440,6 +440,18 @@
   "languageChanged": "Language changed successfully",
   "@languageChanged": {
     "description": "Language changed success message"
+  },
+  "logout": "Logout",
+  "@logout": {
+    "description": "Logout button text"
+  },
+  "logoutConfirmation": "Are you sure you want to logout?",
+  "@logoutConfirmation": {
+    "description": "Logout confirmation dialog message"
+  },
+  "yes": "Yes",
+  "@yes": {
+    "description": "Yes button text"
   }
 }
 

@@ -85,14 +85,19 @@ class OfficeController extends Controller
         }
         
         // Only load relationships needed for list view (not statusHistory - too heavy)
-        // Show packages with status: arrived_at_office, on_the_way, delivered, return_to_office, returned_to_merchant, cancelled
+        // Show packages with all statuses including: registered, assigned_to_rider, picked_up, ready_for_delivery, contact_failed
         $query = Package::whereIn('status', [
+            'registered',
             'arrived_at_office',
+            'assigned_to_rider',
+            'picked_up',
+            'ready_for_delivery',
             'on_the_way',
             'delivered',
             'return_to_office',
             'returned_to_merchant',
-            'cancelled'
+            'cancelled',
+            'contact_failed'
         ])
             ->with(['merchant:id,business_name', 'currentRider:id,name', 'statusHistory']);
 
@@ -134,6 +139,7 @@ class OfficeController extends Controller
             'return_to_office' => 'Returned to Office',
             'returned_to_merchant' => 'Returned to Merchant',
             'cancelled' => 'Cancelled',
+            'contact_failed' => 'Contact Failed',
         ];
 
         $apiToken = $this->getApiToken();

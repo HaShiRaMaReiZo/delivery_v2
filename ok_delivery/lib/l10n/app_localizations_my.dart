@@ -357,4 +357,13 @@ class AppLocalizationsMy extends AppLocalizations {
 
   @override
   String get languageChanged => 'ဘာသာစကား အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ';
+
+  @override
+  String get logout => 'ထွက်ရန်';
+
+  @override
+  String get logoutConfirmation => 'သင်ထွက်ရန် သေချာပါသလား?';
+
+  @override
+  String get yes => 'ဟုတ်ကဲ့';
 }

@@ -39,9 +39,9 @@ class RiderLocationUpdated implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        // Office can always see all riders
+        // Office can always see all riders (private channel with authorization)
         $channels = [
-            new Channel('office.riders.locations'),
+            new PrivateChannel('office.riders.locations'),
         ];
 
         // Merchant can see rider location only when package status = on_the_way
