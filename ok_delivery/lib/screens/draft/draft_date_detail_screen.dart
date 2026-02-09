@@ -273,290 +273,424 @@ class _DraftDateDetailScreenState extends State<DraftDateDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        title: Text(_formatDate(widget.date)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: _isDeleting || _isSubmitting
-          ? const Center(child: CircularProgressIndicator())
-          : _packages.isEmpty
-          ? const Center(
-              child: Text(
-                'No packages for this date',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
+      backgroundColor: AppTheme.neutral50,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Custom Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppTheme.neutral900, AppTheme.neutral800],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _packages.length,
-                    itemBuilder: (context, index) {
-                      final package = _packages[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Package Image
-                              if (package.packageImage != null)
-                                GestureDetector(
-                                  onTap: () {
-                                    ImagePreviewScreen.show(
-                                      context,
-                                      package.packageImage!,
-                                      title: 'Package Image',
-                                    );
-                                  },
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      package.packageImage!,
-                                      width: double.infinity,
-                                      height: 120,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                                height: 120,
-                                                color: Colors.grey[300],
-                                                child: const Center(
-                                                  child: Icon(Icons.error),
-                                                ),
-                                              ),
-                                    ),
-                                  ),
-                                ),
-                              if (package.packageImage != null)
-                                const SizedBox(height: 12),
-                              // Customer Name
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.person,
-                                    size: 18,
-                                    color: AppTheme.darkBlue,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      package.customerName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Customer Phone
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.phone,
-                                    size: 18,
-                                    color: AppTheme.darkBlue,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    package.customerPhone,
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Delivery Address
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.location_on,
-                                    size: 18,
-                                    color: AppTheme.darkBlue,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      package.deliveryAddress,
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Payment Type and Amount
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.payment,
-                                    size: 18,
-                                    color: AppTheme.darkBlue,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    package.paymentType.toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '${package.amount.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.darkBlue,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Package Description (if exists)
-                              if (package.packageDescription != null &&
-                                  package.packageDescription!.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Icon(
-                                      Icons.description,
-                                      size: 18,
-                                      color: AppTheme.darkBlue,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        package.packageDescription!,
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              // Created At and Action Buttons
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.access_time,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Created: ${_formatDateTime(package.createdAt)}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      color: AppTheme.darkBlue,
-                                      size: 20,
-                                    ),
-                                    onPressed: () async {
-                                      final result = await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              EditDraftScreen(package: package),
-                                        ),
-                                      );
-
-                                      if (result == true) {
-                                        // Reload drafts to get updated data
-                                        _loadDrafts();
-                                      }
-                                    },
-                                    tooltip: 'Edit',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete,
-                                      color: Colors.red,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => _deleteDraft(package.id),
-                                    tooltip: 'Delete',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                ],
-                              ),
-                            ],
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatDate(widget.date),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-                // Register All Button
-                if (_packages.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, -2),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_packages.length} package${_packages.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: AppTheme.yellow400,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
-                    child: SafeArea(
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isSubmitting
-                              ? null
-                              : _registerAllPackages,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.darkBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Text(
-                                  'Register All Packages',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                  ),
+                ],
+              ),
+            ),
+            // Body Content
+            if (_isDeleting || _isSubmitting)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (_packages.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    'No packages for this date',
+                    style: TextStyle(fontSize: 18, color: AppTheme.neutral500),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: _packages.length,
+                  itemBuilder: (context, index) {
+                    final package = _packages[index];
+                    return _buildPackageCard(package);
+                  },
+                ),
+              ),
+            // Register All Button
+            if (_packages.isNotEmpty && !_isDeleting && !_isSubmitting)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    top: BorderSide(color: AppTheme.neutral200, width: 1),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _registerAllPackages,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.yellow400,
+                        foregroundColor: AppTheme.neutral900,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
+                        elevation: 0,
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppTheme.neutral900,
+                                ),
+                              ),
+                            )
+                          : const Text(
+                              'Register All Packages',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackageCard(PackageModel package) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.neutral100, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Package Image
+          if (package.packageImage != null)
+            GestureDetector(
+              onTap: () {
+                ImagePreviewScreen.show(
+                  context,
+                  package.packageImage!,
+                  title: 'Package Image',
+                );
+              },
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+                child: Image.network(
+                  package.packageImage!,
+                  width: double.infinity,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 180,
+                    color: AppTheme.neutral100,
+                    child: const Center(
+                      child: Icon(
+                        Icons.image_not_supported,
+                        color: AppTheme.neutral400,
+                        size: 48,
                       ),
                     ),
                   ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Customer Name
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.yellow50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.yellow200),
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        size: 16,
+                        color: AppTheme.yellow600,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        package.customerName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.neutral900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Customer Phone
+                Row(
+                  children: [
+                    Icon(
+                      Icons.phone_outlined,
+                      size: 16,
+                      color: AppTheme.neutral500,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      package.customerPhone,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.neutral700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Delivery Address
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: AppTheme.neutral500,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        package.deliveryAddress,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.neutral700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Package Description (if exists)
+                if (package.packageDescription != null &&
+                    package.packageDescription!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.description_outlined,
+                        size: 16,
+                        color: AppTheme.neutral500,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          package.packageDescription!,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.neutral700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+                // Payment Type and Amount
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neutral50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.neutral100),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: package.paymentType.toLowerCase() == 'cod'
+                                  ? AppTheme.yellow50
+                                  : AppTheme.neutral100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color:
+                                    package.paymentType.toLowerCase() == 'cod'
+                                    ? AppTheme.yellow200
+                                    : AppTheme.neutral200,
+                              ),
+                            ),
+                            child: Text(
+                              package.paymentType.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    package.paymentType.toLowerCase() == 'cod'
+                                    ? AppTheme.yellow700
+                                    : AppTheme.neutral600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${package.amount.toStringAsFixed(0)} MMK',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.neutral900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Created At and Action Buttons
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: AppTheme.neutral400,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Created: ${_formatDateTime(package.createdAt)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.neutral500,
+                      ),
+                    ),
+                    const Spacer(),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  EditDraftScreen(package: package),
+                            ),
+                          );
+
+                          if (result == true) {
+                            _loadDrafts();
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.yellow50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.yellow200),
+                          ),
+                          child: const Icon(
+                            Icons.edit_outlined,
+                            color: AppTheme.yellow600,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _deleteDraft(package.id),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }

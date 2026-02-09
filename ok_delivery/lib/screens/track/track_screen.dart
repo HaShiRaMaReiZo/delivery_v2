@@ -5,8 +5,7 @@ import '../../models/package_model.dart';
 import '../../repositories/package_repository.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
-import '../../core/utils/date_utils.dart' as myanmar_date;
-import 'track_date_detail_screen.dart';
+import 'track_widgets.dart';
 
 class TrackScreen extends StatefulWidget {
   const TrackScreen({super.key});
@@ -26,6 +25,8 @@ class _TrackScreenState extends State<TrackScreen> {
   int _currentPage = 1;
   bool _hasMore = true;
   bool _isLoadingMore = false;
+  String _searchQuery = '';
+  String _activeFilter = 'all'; // all, pending, pickup, transit, delivered
 
   @override
   void initState() {
@@ -86,210 +87,185 @@ class _TrackScreenState extends State<TrackScreen> {
     }
   }
 
-  Map<DateTime, List<PackageModel>> _groupPackagesByRegisteredDate() {
-    final Map<DateTime, List<PackageModel>> grouped = {};
+  List<PackageModel> _filteredPackages() {
+    List<PackageModel> list = List.from(_packages);
 
-    for (final package in _packages) {
-      // Only group packages that have been registered (have registered_at)
-      if (package.registeredAt == null) continue;
-
-      // Use Myanmar timezone for grouping
-      final date = myanmar_date.MyanmarDateUtils.getDateKey(
-        package.registeredAt!,
-      );
-
-      if (!grouped.containsKey(date)) {
-        grouped[date] = [];
-      }
-      grouped[date]!.add(package);
+    // Filter by status category
+    if (_activeFilter != 'all') {
+      list = list.where((p) {
+        final status = p.status;
+        switch (_activeFilter) {
+          case 'pending':
+            return status == 'registered' || status == 'assigned_to_rider';
+          case 'pickup':
+            return status == 'picked_up';
+          case 'transit':
+            return status == 'ready_for_delivery' || status == 'on_the_way';
+          case 'delivered':
+            return status == 'delivered';
+          default:
+            return true;
+        }
+      }).toList();
     }
 
-    return grouped;
+    // Search by tracking code or customer name
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((p) {
+        final tracking = p.trackingCode?.toLowerCase() ?? '';
+        final name = p.customerName.toLowerCase();
+        return tracking.contains(q) || name.contains(q);
+      }).toList();
+    }
+
+    // Sort by updated date (newest first)
+    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return list;
   }
 
-  String _formatDate(DateTime date) {
-    // date is already in Myanmar timezone from getDateKey
-    final now = myanmar_date.MyanmarDateUtils.getMyanmarNow();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final dateOnly = DateTime(date.year, date.month, date.day);
+  Map<String, int> _statusCounts() {
+    int all = _packages.length;
+    int pending = 0;
+    int pickup = 0;
+    int transit = 0;
+    int delivered = 0;
 
-    if (dateOnly == today) {
-      return AppLocalizations.of(context)!.today;
-    } else if (dateOnly == yesterday) {
-      return AppLocalizations.of(context)!.yesterday;
-    } else {
-      final months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
+    for (final p in _packages) {
+      switch (p.status) {
+        case 'registered':
+        case 'assigned_to_rider':
+          pending++;
+          break;
+        case 'picked_up':
+          pickup++;
+          break;
+        case 'ready_for_delivery':
+        case 'on_the_way':
+          transit++;
+          break;
+        case 'delivered':
+          delivered++;
+          break;
+        default:
+          break;
+      }
     }
+
+    return {
+      'all': all,
+      'pending': pending,
+      'pickup': pickup,
+      'transit': transit,
+      'delivered': delivered,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.trackPackages),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _loadPackages(refresh: true),
-            tooltip: AppLocalizations.of(context)!.refresh,
+    final l10n = AppLocalizations.of(context)!;
+    final bool showBackButton = Navigator.of(context).canPop();
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                l10n.errorLoadingPackages,
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () => _loadPackages(refresh: true),
+                child: Text(l10n.retry),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.errorLoadingPackages,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () => _loadPackages(refresh: true),
-                    child: Text(AppLocalizations.of(context)!.retry),
-                  ),
-                ],
-              ),
-            )
-          : _packages.isEmpty
-          ? Center(
-              child: Text(
-                AppLocalizations.of(context)!.noPackagesFound,
-                style: const TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () => _loadPackages(refresh: true),
-              child: Builder(
-                builder: (context) {
-                  final grouped = _groupPackagesByRegisteredDate();
+        ),
+      );
+    }
 
-                  if (grouped.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No registered packages found',
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    );
-                  }
+    if (_packages.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(
+          child: Text(
+            l10n.noPackagesFound,
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        ),
+      );
+    }
 
-                  final sortedDates = grouped.keys.toList()
-                    ..sort((a, b) => b.compareTo(a));
+    final filtered = _filteredPackages();
+    final counts = _statusCounts();
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: sortedDates.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == sortedDates.length) {
-                        // Load more trigger
-                        if (!_isLoadingMore) {
-                          _loadPackages();
-                        }
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
+    return Scaffold(
+      backgroundColor: AppTheme.neutral50,
+      body: SafeArea(
+        child: Column(
+          children: [
+            TrackHeader(
+              totalCount: _packages.length,
+              searchQuery: _searchQuery,
+              onSearchChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              onRefreshPressed: () => _loadPackages(refresh: true),
+              showBackButton: showBackButton,
+            ),
+            SizedBox(height: 20),
+            TrackFilterChips(
+              activeFilter: _activeFilter,
+              countAll: counts['all'] ?? 0,
+              countPending: counts['pending'] ?? 0,
+              countPickup: counts['pickup'] ?? 0,
+              countTransit: counts['transit'] ?? 0,
+              countDelivered: counts['delivered'] ?? 0,
+              onFilterChanged: (value) {
+                setState(() {
+                  _activeFilter = value;
+                });
+              },
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _loadPackages(refresh: true),
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  itemCount: filtered.length + (_hasMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == filtered.length) {
+                      if (!_isLoadingMore) {
+                        _loadPackages();
                       }
-
-                      final date = sortedDates[index];
-                      final packages = grouped[date]!;
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          onTap: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TrackDateDetailScreen(
-                                  date: date,
-                                  packages: packages,
-                                ),
-                              ),
-                            );
-
-                            if (result == true) {
-                              _loadPackages(refresh: true);
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primaryBlue,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.calendar_today,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _formatDate(date),
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.darkBlue,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${packages.length} package${packages.length == 1 ? '' : 's'}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
                       );
-                    },
-                  );
-                },
+                    }
+
+                    final package = filtered[index];
+                    return TrackPackageCard(package: package);
+                  },
+                ),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,6 +1,6 @@
 class ApiEndpoints {
   // TODO: set from env/config
-  static const String baseUrl = 'https://ok-delivery.onrender.com';
+  static const String baseUrl = 'https://ok-delivery-service.onrender.com';
 
   // Auth
   static const String login = '/api/auth/login';

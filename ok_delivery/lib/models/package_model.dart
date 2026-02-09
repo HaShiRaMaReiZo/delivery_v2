@@ -30,6 +30,8 @@ class PackageModel {
   final String? status; // Nullable for drafts
   @JsonKey(name: 'registered_at', fromJson: _dateTimeFromJsonNullable)
   final DateTime? registeredAt; // Nullable - only set when package is registered
+  @JsonKey(name: 'delivered_at', fromJson: _dateTimeFromJsonNullable)
+  final DateTime? deliveredAt; // Nullable - only set when package is delivered
   @JsonKey(name: 'created_at', fromJson: _dateTimeFromJson)
   final DateTime createdAt;
   @JsonKey(name: 'updated_at', fromJson: _dateTimeFromJson)
@@ -70,6 +72,7 @@ class PackageModel {
     this.packageDescription,
     this.status, // Nullable for drafts
     this.registeredAt, // Nullable - only set when package is registered
+    this.deliveredAt, // Nullable - only set when package is delivered
     required this.createdAt,
     required this.updatedAt,
   });

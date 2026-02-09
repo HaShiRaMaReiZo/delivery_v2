@@ -9,6 +9,7 @@ import '../../repositories/package_repository.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../widgets/image_preview_screen.dart';
+import 'register_package_widgets.dart';
 
 // Helper class to store package with its image and draft ID
 class PackageWithImage {
@@ -39,7 +40,7 @@ class _RegisterPackageScreenState extends State<RegisterPackageScreen> {
   final _amountController = TextEditingController();
   final _packageDescriptionController = TextEditingController();
 
-  String _paymentType = 'prepaid';
+  String _paymentType = 'cod';
   File? _selectedImage;
   final List<PackageWithImage> _packageList = [];
   bool _isSubmitting = false;
@@ -113,7 +114,7 @@ class _RegisterPackageScreenState extends State<RegisterPackageScreen> {
     _deliveryAddressController.clear();
     _amountController.clear();
     _packageDescriptionController.clear();
-    _paymentType = 'prepaid';
+    _paymentType = 'cod';
     setState(() {
       _selectedImage = null;
     });
@@ -131,6 +132,17 @@ class _RegisterPackageScreenState extends State<RegisterPackageScreen> {
 
   Future<void> _addToPackageList() async {
     if (_formKey.currentState!.validate()) {
+      // Validate image is required
+      if (_selectedImage == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please add a package photo (required)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final amount = double.tryParse(_amountController.text.trim());
       if (amount == null || amount < 0) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -161,36 +173,90 @@ class _RegisterPackageScreenState extends State<RegisterPackageScreen> {
         // Save to draft API
         final response = await _packageRepository.saveDraft([package]);
 
-        if (response.packages.isNotEmpty) {
-          final savedPackage = response.packages.first;
-          setState(() {
-            _packageList.add(
-              PackageWithImage(
-                package: package,
-                imageFile: _selectedImage,
-                draftId: savedPackage.id,
-              ),
+        // Debug: Log response details
+        debugPrint('SaveDraft Response:');
+        debugPrint('  - createdCount: ${response.createdCount}');
+        debugPrint('  - failedCount: ${response.failedCount}');
+        debugPrint('  - packages.length: ${response.packages.length}');
+        debugPrint('  - errors.length: ${response.errors.length}');
+        if (response.imageUploadErrors != null) {
+          debugPrint(
+            '  - imageUploadErrors.length: ${response.imageUploadErrors!.length}',
+          );
+        }
+
+        // Check if package was created successfully (even if image upload failed)
+        // The package is saved even if image upload fails, so check createdCount too
+        if (response.packages.isNotEmpty || response.createdCount > 0) {
+          // If packages list is empty but createdCount > 0, the package was saved but parsing failed
+          // In this case, we should still add it to the queue using the original package data
+          if (response.packages.isNotEmpty) {
+            final savedPackage = response.packages.first;
+            setState(() {
+              _packageList.add(
+                PackageWithImage(
+                  package: package,
+                  imageFile: _selectedImage,
+                  draftId: savedPackage.id,
+                ),
+              );
+            });
+          } else {
+            // Package was saved but parsing failed - we can't get the ID
+            // This shouldn't happen, but handle it gracefully
+            debugPrint(
+              'WARNING: Package created but parsing failed. createdCount: ${response.createdCount}',
             );
-          });
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Package saved but could not be added to queue. Please refresh.',
+                  ),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+            return; // Exit early since we can't add to queue without ID
+          }
 
           _clearForm();
 
           if (mounted) {
+            // Show success message, but warn about image upload errors
+            String message =
+                'Package saved to draft (${_packageList.length} total)';
+            if (response.imageUploadErrors != null &&
+                response.imageUploadErrors!.isNotEmpty) {
+              message += '\n⚠️ Image upload failed, but package was saved';
+            }
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  'Package saved to draft (${_packageList.length} total)',
-                ),
-                backgroundColor: Colors.green,
+                content: Text(message),
+                backgroundColor:
+                    response.imageUploadErrors != null &&
+                        response.imageUploadErrors!.isNotEmpty
+                    ? Colors.orange
+                    : Colors.green,
+                duration: const Duration(seconds: 3),
               ),
             );
           }
         } else {
+          // Package creation failed
+          String errorMsg = 'Failed to save package to draft';
+          if (response.errors.isNotEmpty) {
+            errorMsg = response.errors.first.error;
+          }
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to save package to draft'),
+              SnackBar(
+                content: Text(errorMsg),
                 backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
               ),
             );
           }
@@ -318,279 +384,674 @@ class _RegisterPackageScreenState extends State<RegisterPackageScreen> {
     ).showSnackBar(const SnackBar(content: Text('Package removed from list')));
   }
 
+  double _getTotalAmount() {
+    return _packageList.fold(0.0, (sum, item) => sum + item.package.amount);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final totalAmount = _getTotalAmount();
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(title: const Text('Register Package')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Package List Summary
-            if (_packageList.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+      backgroundColor: AppTheme.neutral50,
+      body: Column(
+        children: [
+          // Custom Header
+          RegisterPackageHeader(
+            packageCount: _packageList.length,
+            onBack: () => Navigator.of(context).pop(),
+            onSubmit: _submitPackages,
+            isSubmitting: _isSubmitting,
+          ),
+          // Content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Package Queue Summary
+                  if (_packageList.isNotEmpty) ...[
+                    PackageQueueSummary(
+                      packageCount: _packageList.length,
+                      totalAmount: totalAmount,
                     ),
+                    const SizedBox(height: 24),
                   ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+
+                  // Package List
+                  if (_packageList.isNotEmpty) ...[
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Package List (${_packageList.length})',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                        const Icon(
+                          Icons.list,
+                          size: 16,
+                          color: AppTheme.neutral500,
                         ),
-                        ElevatedButton(
-                          onPressed: _isSubmitting ? null : _submitPackages,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.darkBlue,
+                        const SizedBox(width: 8),
+                        Text(
+                          'Queued Packages',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.neutral600,
                           ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Text('Submit All'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     ...List.generate(_packageList.length, (index) {
-                      final item = _packageList[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: item.imageFile != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    item.imageFile!,
-                                    width: 50,
-                                    height: 50,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : const Icon(Icons.inventory_2),
-                          title: Text(item.package.customerName),
-                          subtitle: Text(
-                            '${item.package.deliveryAddress} - ${item.package.paymentType.toUpperCase()} - ${item.package.amount.toStringAsFixed(2)}',
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _removeFromPackageList(index),
-                          ),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: QueuedPackageCard(
+                          package: _packageList[index],
+                          index: index,
+                          onRemove: () => _removeFromPackageList(index),
                         ),
                       );
                     }),
+                    const SizedBox(height: 24),
                   ],
-                ),
-              ),
-            if (_packageList.isNotEmpty) const SizedBox(height: 16),
 
-            // Package Form
-            Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Customer Name
-                  TextFormField(
-                    controller: _customerNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer Name *',
-                      hintText: 'Enter customer name',
-                      prefixIcon: Icon(Icons.person),
+                  // Registration Form
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppTheme.neutral200),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter customer name';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Customer Phone
-                  TextFormField(
-                    controller: _customerPhoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer Phone *',
-                      hintText: 'Enter phone number',
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Delivery Address
-                  TextFormField(
-                    controller: _deliveryAddressController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Delivery Address *',
-                      hintText: 'Enter delivery address',
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter delivery address';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Payment Type
-                  DropdownButtonFormField<String>(
-                    initialValue: _paymentType,
-                    decoration: const InputDecoration(
-                      labelText: 'Payment Type *',
-                      prefixIcon: Icon(Icons.payment),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'prepaid',
-                        child: Text('Prepaid'),
-                      ),
-                      DropdownMenuItem(value: 'cod', child: Text('COD')),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _paymentType = value!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Amount
-                  TextFormField(
-                    controller: _amountController,
-                    keyboardType: TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Amount *',
-                      hintText: 'Enter amount',
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter amount';
-                      }
-                      final amount = double.tryParse(value);
-                      if (amount == null || amount < 0) {
-                        return 'Please enter a valid amount';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Package Description (Optional)
-                  TextFormField(
-                    controller: _packageDescriptionController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Package Description (Optional)',
-                      hintText: 'Enter package description',
-                      prefixIcon: Icon(Icons.description),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Package Image
-                  if (_selectedImage != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Stack(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          GestureDetector(
-                            onTap: () {
-                              ImagePreviewScreen.showFile(
-                                context,
-                                _selectedImage!,
-                                title: 'Package Image Preview',
-                              );
-                            },
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                _selectedImage!,
-                                height: 200,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Package Details',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.neutral900,
+                                ),
                               ),
-                            ),
+                              Text(
+                                '* Required',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppTheme.yellow600,
+                                ),
+                              ),
+                            ],
                           ),
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.white,
+                          const SizedBox(height: 20),
+
+                          // Customer Name
+                          _buildFormField(
+                            label: 'Customer Name',
+                            icon: Icons.person,
+                            controller: _customerNameController,
+                            hint: 'Enter customer name',
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter customer name';
+                              }
+                              return null;
+                            },
+                            isRequired: true,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Customer Phone
+                          _buildFormField(
+                            label: 'Customer Phone',
+                            icon: Icons.phone,
+                            controller: _customerPhoneController,
+                            hint: '09-XXX-XXX-XXX',
+                            keyboardType: TextInputType.phone,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter phone number';
+                              }
+                              return null;
+                            },
+                            isRequired: true,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Delivery Address
+                          _buildFormField(
+                            label: 'Delivery Address',
+                            icon: Icons.home,
+                            controller: _deliveryAddressController,
+                            hint: 'House No, Street, etc.',
+                            maxLines: 2,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter delivery address';
+                              }
+                              return null;
+                            },
+                            isRequired: true,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Payment Type & Amount Grid
+                          Row(
+                            children: [
+                              Expanded(child: _buildPaymentTypeSelector()),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildFormField(
+                                  label: 'Amount',
+                                  icon: Icons.currency_exchange,
+                                  controller: _amountController,
+                                  hint: 'MMK',
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Required';
+                                    }
+                                    final amount = double.tryParse(value);
+                                    if (amount == null || amount < 0) {
+                                      return 'Invalid';
+                                    }
+                                    return null;
+                                  },
+                                  isRequired: true,
+                                ),
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _selectedImage = null;
-                                });
-                              },
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.black54,
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Package Description
+                          _buildFormField(
+                            label: 'Description',
+                            icon: Icons.description,
+                            controller: _packageDescriptionController,
+                            hint: 'Package contents, special instructions...',
+                            maxLines: 3,
+                            isRequired: false,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Photo Button
+                          _buildPhotoButton(),
+                          const SizedBox(height: 20),
+
+                          // Action Buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : _addToPackageList,
+                                  icon: const Icon(Icons.add, size: 20),
+                                  label: const Text('Add to Queue'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.neutral100,
+                                    foregroundColor: AppTheme.neutral900,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSubmitting
+                                      ? null
+                                      : () async {
+                                          await _addToPackageList();
+                                        },
+                                  icon: const Icon(Icons.save, size: 20),
+                                  label: const Text('Save Draft'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.yellow400,
+                                    foregroundColor: AppTheme.neutral900,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    )
-                  else
-                    OutlinedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Take Package Photo (Optional)'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
                     ),
+                  ),
                   const SizedBox(height: 24),
 
-                  // Add to List Button
-                  ElevatedButton(
-                    onPressed: _addToPackageList,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryBlue,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                  // Help Tip Box
+                  const HelpTipBox(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormField({
+    required String label,
+    required IconData icon,
+    required TextEditingController controller,
+    String? hint,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+    required bool isRequired,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: AppTheme.yellow600),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: AppTheme.neutral700),
+            ),
+            if (isRequired) ...[
+              const SizedBox(width: 4),
+              Text(
+                '*',
+                style: TextStyle(fontSize: 13, color: AppTheme.yellow600),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: AppTheme.neutral50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.neutral300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.neutral300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.yellow400, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.credit_card, size: 16, color: AppTheme.yellow600),
+            const SizedBox(width: 6),
+            const Text(
+              'Payment',
+              style: TextStyle(fontSize: 13, color: AppTheme.neutral700),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '*',
+              style: TextStyle(fontSize: 13, color: AppTheme.yellow600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _paymentType,
+          isExpanded: true,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppTheme.neutral50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.neutral300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.neutral300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppTheme.yellow400, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+          ),
+          dropdownColor: Colors.white,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppTheme.neutral600,
+            size: 20,
+          ),
+          iconSize: 20,
+          style: const TextStyle(
+            fontSize: 15,
+            color: AppTheme.neutral900,
+            fontWeight: FontWeight.w500,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          items: [
+            DropdownMenuItem<String>(
+              value: 'cod',
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.yellow50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.yellow200),
+                      ),
+                      child: const Icon(
+                        Icons.money,
+                        size: 16,
+                        color: AppTheme.yellow600,
+                      ),
                     ),
-                    child: const Text('Add to List'),
+                    const SizedBox(width: 10),
+                    const Flexible(
+                      child: Text(
+                        'COD',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.neutral900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.yellow50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Cash on Delivery',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.yellow700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            DropdownMenuItem<String>(
+              value: 'prepaid',
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neutral100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.neutral200),
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet,
+                        size: 16,
+                        color: AppTheme.neutral600,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Flexible(
+                      child: Text(
+                        'Prepaid',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.neutral900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neutral100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Prepaid',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.neutral600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          selectedItemBuilder: (BuildContext context) {
+            return [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.yellow50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.yellow200),
+                    ),
+                    child: const Icon(
+                      Icons.money,
+                      size: 14,
+                      color: AppTheme.yellow600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'COD',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.neutral900,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neutral100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.neutral200),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet,
+                      size: 14,
+                      color: AppTheme.neutral600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'Prepaid',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.neutral900,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ];
+          },
+          onChanged: (value) {
+            setState(() {
+              _paymentType = value!;
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotoButton() {
+    if (_selectedImage != null) {
+      return GestureDetector(
+        onTap: () {
+          ImagePreviewScreen.showFile(
+            context,
+            _selectedImage!,
+            title: 'Package Image Preview',
+          );
+        },
+        child: Container(
+          height: 150,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.yellow400, width: 2),
+            color: AppTheme.yellow50,
+          ),
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  _selectedImage!,
+                  width: double.infinity,
+                  height: 150,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      _selectedImage = null;
+                    });
+                  },
+                  style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: _pickImage,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: AppTheme.neutral300,
+            width: 2,
+            style: BorderStyle.solid,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.camera_alt, color: AppTheme.neutral600, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Add Package Photo',
+              style: TextStyle(color: AppTheme.neutral600),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '*',
+              style: TextStyle(color: AppTheme.yellow600, fontSize: 16),
+            ),
+            const SizedBox(width: 2),
+            Text(
+              'Required',
+              style: TextStyle(color: AppTheme.yellow600, fontSize: 12),
             ),
           ],
         ),

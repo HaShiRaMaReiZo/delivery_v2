@@ -72,6 +72,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'OK Delivery - Merchant',
       theme: AppTheme.lightTheme,
+      debugShowCheckedModeBanner: false, // Remove debug banner
       locale: _selectedLocale, // Use saved language or device default
       localizationsDelegates: const [
         AppLocalizations.delegate,

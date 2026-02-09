@@ -1,5 +1,6 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../models/package_model.dart';
@@ -157,14 +158,32 @@ class PackagesRepository {
       );
 
       if (response.data == null) {
-        throw Exception('Invalid response from server');
+        throw Exception('Invalid response from server: empty response');
       }
 
-      final packageData = response.data is Map
-          ? (response.data['package'] ?? response.data)
-          : response.data;
+      // Handle different response formats
+      Map<String, dynamic>? packageData;
+      
+      if (response.data is Map) {
+        final data = response.data as Map<String, dynamic>;
+        packageData = data['package'] as Map<String, dynamic>? ?? data;
+      } else if (response.data is String) {
+        // If response is a string, try to parse it as JSON
+        try {
+          final parsed = jsonDecode(response.data as String);
+          if (parsed is Map<String, dynamic>) {
+            packageData = parsed['package'] as Map<String, dynamic>? ?? parsed;
+          }
+        } catch (e) {
+          throw Exception('Invalid response format: ${response.data}');
+        }
+      }
 
-      return PackageModel.fromJson(packageData as Map<String, dynamic>);
+      if (packageData == null) {
+        throw Exception('Invalid response format: expected package data but got ${response.data.runtimeType}');
+      }
+
+      return PackageModel.fromJson(packageData);
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['message'] ??

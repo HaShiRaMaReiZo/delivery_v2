@@ -385,7 +385,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                                             final imageUrl =
                                                 packageImage.startsWith('http')
                                                 ? packageImage
-                                                : 'https://ok-delivery.onrender.com/storage/$packageImage';
+                                                : 'https://ok-delivery-service.onrender.com/storage/$packageImage';
                                             FullImageViewer.show(
                                               context,
                                               imageUrl,
@@ -403,7 +403,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                                                         'http',
                                                       )
                                                       ? packageImage
-                                                      : 'https://ok-delivery.onrender.com/storage/$packageImage',
+                                                      : 'https://ok-delivery-service.onrender.com/storage/$packageImage',
                                                   height: 200,
                                                   width: double.infinity,
                                                   fit: BoxFit.cover,

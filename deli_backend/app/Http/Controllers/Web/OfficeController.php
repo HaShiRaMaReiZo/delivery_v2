@@ -242,8 +242,25 @@ class OfficeController extends Controller
 
     public function map()
     {
-        $apiToken = $this->getApiToken();
-        return view('office.map', compact('apiToken'));
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return redirect()->route('login')->with('error', 'Please login to access this page.');
+            }
+            
+            $apiToken = $this->getApiToken();
+            if (!$apiToken) {
+                Log::error('Failed to get API token for user: ' . $user->id);
+                return redirect()->back()->with('error', 'Failed to initialize. Please try again.');
+            }
+            
+            return view('office.map', compact('apiToken', 'user'));
+        } catch (\Exception $e) {
+            Log::error('Error in map method: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->with('error', 'An error occurred. Please try again.');
+        }
     }
 
     public function showRegisterUser()

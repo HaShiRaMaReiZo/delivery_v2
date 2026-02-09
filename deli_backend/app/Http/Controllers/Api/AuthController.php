@@ -40,7 +40,7 @@ class AuthController extends Controller
                 'business_email' => 'required|email',
             ]);
 
-            Merchant::create([
+            $merchant = Merchant::create([
                 'user_id' => $user->id,
                 'business_name' => $request->business_name,
                 'business_address' => $request->business_address,
@@ -48,13 +48,17 @@ class AuthController extends Controller
                 'business_email' => $request->business_email,
                 'status' => 'pending',
             ]);
+
+            // Update user with merchant_id
+            $user->merchant_id = $merchant->id;
+            $user->save();
         } elseif ($request->role === 'rider') {
             $request->validate([
                 'vehicle_type' => 'required|in:bike,motorcycle,car,van',
                 'phone' => 'required|string',
             ]);
 
-            Rider::create([
+            $rider = Rider::create([
                 'user_id' => $user->id,
                 'name' => $request->name,
                 'phone' => $request->phone,
@@ -63,6 +67,10 @@ class AuthController extends Controller
                 'license_number' => $request->license_number,
                 'status' => 'offline',
             ]);
+
+            // Update user with rider_id
+            $user->rider_id = $rider->id;
+            $user->save();
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

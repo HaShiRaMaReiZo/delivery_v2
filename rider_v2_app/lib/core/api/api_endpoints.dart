@@ -1,5 +1,5 @@
 class ApiEndpoints {
-  static const String baseUrl = 'https://ok-delivery.onrender.com';
+  static const String baseUrl = 'https://ok-delivery-service.onrender.com';
 
   // Auth
   static const String login = '/api/auth/login';
@@ -8,6 +8,8 @@ class ApiEndpoints {
 
   // Rider Packages
   static const String riderPackages = '/api/rider/packages';
+  static String riderPackagesHistory(int riderId) =>
+      '/api/rider/packages/$riderId/history';
   static String riderPackage(int id) => '/api/rider/packages/$id';
   static String riderStatus(int id) => '/api/rider/packages/$id/status';
   static String riderReceiveFromOffice(int id) =>
@@ -22,4 +24,8 @@ class ApiEndpoints {
 
   // Location
   static const String riderLocation = '/api/rider/location';
+
+  // Location Tracker (Node.js Socket.io server)
+  static const String locationTrackerUrl =
+      'https://location-tracker-js.onrender.com';
 }

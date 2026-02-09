@@ -447,24 +447,53 @@ class BulkPackageResponse {
   });
 
   factory BulkPackageResponse.fromJson(Map<String, dynamic> json) {
+    // Parse packages with error handling
+    List<PackageModel> packagesList = [];
+    if (json['packages'] is List<dynamic>) {
+      final packagesData = json['packages'] as List<dynamic>;
+      for (var p in packagesData) {
+        try {
+          if (p is Map<String, dynamic>) {
+            packagesList.add(PackageModel.fromJson(p));
+          }
+        } catch (e) {
+          debugPrint('Error parsing package: $e');
+          debugPrint('Package data: $p');
+          // Continue parsing other packages even if one fails
+        }
+      }
+    }
+
     return BulkPackageResponse(
       message: json['message'] as String,
       createdCount:
           json['created_count'] as int? ?? json['submitted_count'] as int? ?? 0,
       submittedCount: json['submitted_count'] as int? ?? 0,
-      failedCount: json['failed_count'] as int,
-      packages:
-          (json['packages'] as List<dynamic>?)
-              ?.map((p) => PackageModel.fromJson(p as Map<String, dynamic>))
-              .toList() ??
-          [],
+      failedCount: json['failed_count'] as int? ?? 0,
+      packages: packagesList,
       errors:
           (json['errors'] as List<dynamic>?)
-              ?.map((e) => PackageError.fromJson(e as Map<String, dynamic>))
+              ?.map((e) {
+                try {
+                  return PackageError.fromJson(e as Map<String, dynamic>);
+                } catch (err) {
+                  debugPrint('Error parsing error: $err');
+                  return null;
+                }
+              })
+              .whereType<PackageError>()
               .toList() ??
           [],
       imageUploadErrors: (json['image_upload_errors'] as List<dynamic>?)
-          ?.map((e) => ImageUploadError.fromJson(e as Map<String, dynamic>))
+          ?.map((e) {
+            try {
+              return ImageUploadError.fromJson(e as Map<String, dynamic>);
+            } catch (err) {
+              debugPrint('Error parsing image upload error: $err');
+              return null;
+            }
+          })
+          .whereType<ImageUploadError>()
           .toList(),
     );
   }
@@ -504,14 +533,27 @@ class PackageError {
 }
 
 class ImageUploadError {
-  final String trackingCode;
+  final String? trackingCode; // May be null for drafts
+  final String? customerName; // For drafts
+  final int? index; // For drafts
   final String error;
 
-  ImageUploadError({required this.trackingCode, required this.error});
+  ImageUploadError({
+    this.trackingCode,
+    this.customerName,
+    this.index,
+    required this.error,
+  });
 
   factory ImageUploadError.fromJson(Map<String, dynamic> json) {
     return ImageUploadError(
-      trackingCode: json['tracking_code'] as String,
+      trackingCode: json['tracking_code'] as String?,
+      customerName: json['customer_name'] as String?,
+      index: json['index'] is int
+          ? json['index'] as int
+          : json['index'] is String
+          ? int.tryParse(json['index'] as String)
+          : null,
       error: json['error'] as String,
     );
   }

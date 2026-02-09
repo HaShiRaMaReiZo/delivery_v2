@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Color palette - Using similar colors to merchant app
+  // Legacy color palette - kept for backward compatibility
   static const Color primaryBlue = Color(0xFF8FABD4);
   static const Color lightBeige = Color(0xFFEFECE3);
   static const Color darkBlue = Color(0xFF4A70A9);
   static const Color black = Color(0xFF000000);
+
+  // New neutral & yellow palette (aligned with ok_delivery)
+  static const Color neutral50 = Color(0xFFF9FAFB); // Background
+  static const Color neutral100 = Color(0xFFF3F4F6);
+  static const Color neutral200 = Color(0xFFE5E7EB);
+  static const Color neutral300 = Color(0xFFD1D5DB);
+  static const Color neutral400 = Color(0xFF9CA3AF);
+  static const Color neutral500 = Color(0xFF6B7280);
+  static const Color neutral600 = Color(0xFF4B5563);
+  static const Color neutral700 = Color(0xFF374151);
+  static const Color neutral800 = Color(0xFF1F2937);
+  static const Color neutral900 = Color(0xFF111827);
+
+  static const Color yellow400 = Color(0xFFFACC15);
+  static const Color yellow500 = Color(0xFFEAB308);
+  static const Color yellow600 = Color(0xFFCA8A04);
 
   static ThemeData get lightTheme {
     return ThemeData(

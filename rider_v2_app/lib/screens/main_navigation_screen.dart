@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme/app_theme.dart';
+import '../core/api/api_client.dart';
+import '../core/api/api_endpoints.dart';
 import '../models/user_model.dart';
 import '../bloc/location/location_bloc.dart';
 import '../bloc/location/location_event.dart';
 import 'home/home_page.dart';
+import 'home/bloc/home_bloc.dart';
+import 'home/bloc/home_event.dart';
+import 'home/repository/home_repository.dart';
 import 'packages/packages_screen.dart';
 import 'history/history_screen.dart';
 import 'profile/profile_screen.dart';
@@ -22,16 +28,20 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   bool _locationTrackingStarted = false;
+  HomeBloc? _homeBloc;
+  bool _homeBlocInitialized = false;
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _initializeHomeBloc();
+
     _screens = [
       HomePage(user: widget.user),
       const PackagesScreen(),
-      const HistoryScreen(),
+      HistoryScreen(user: widget.user),
       ProfileScreen(user: widget.user),
     ];
 
@@ -75,45 +85,148 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
+  Future<void> _initializeHomeBloc() async {
+    // Create HomeBloc once at navigation level - persists across tab switches
+    final prefs = await SharedPreferences.getInstance();
+    final savedToken = prefs.getString('auth_token');
+    final apiClient = ApiClient.create(
+      baseUrl: ApiEndpoints.baseUrl,
+      token: savedToken,
+    );
+    _homeBloc = HomeBloc(HomeRepository(apiClient));
+
+    if (mounted) {
+      setState(() {
+        _homeBlocInitialized = true;
+      });
+      // Fetch data once after UI is ready
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _homeBloc != null) {
+          _homeBloc!.add(HomeFetchRequested());
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _homeBloc?.close();
+    super.dispose();
+  }
+
+  Widget _buildNavItem({
+    required IconData icon,
+    required IconData filledIcon,
+    required String label,
+    required int index,
+  }) {
+    final isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentIndex = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? filledIcon : icon,
+              size: 24,
+              color: isSelected ? AppTheme.yellow500 : AppTheme.neutral400,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSelected ? AppTheme.yellow500 : AppTheme.neutral400,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 2),
+              Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.yellow500,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppTheme.darkBlue,
-        unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.white,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
+    // Provide HomeBloc at navigation level so it persists across tab switches
+    if (!_homeBlocInitialized || _homeBloc == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return BlocProvider.value(
+      value: _homeBloc!,
+      child: Scaffold(
+        body: _screens[_currentIndex],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(color: AppTheme.neutral200, width: 1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.inventory_2_outlined),
-            activeIcon: Icon(Icons.inventory_2),
-            label: 'Packages',
+          child: SafeArea(
+            child: Container(
+              height: 70,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavItem(
+                    icon: Icons.home_outlined,
+                    filledIcon: Icons.home,
+                    label: 'Home',
+                    index: 0,
+                  ),
+                  _buildNavItem(
+                    icon: Icons.inventory_2_outlined,
+                    filledIcon: Icons.inventory_2,
+                    label: 'Packages',
+                    index: 1,
+                  ),
+                  _buildNavItem(
+                    icon: Icons.history_outlined,
+                    filledIcon: Icons.history,
+                    label: 'History',
+                    index: 2,
+                  ),
+                  _buildNavItem(
+                    icon: Icons.person_outline,
+                    filledIcon: Icons.person,
+                    label: 'Profile',
+                    index: 3,
+                  ),
+                ],
+              ),
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history_outlined),
-            activeIcon: Icon(Icons.history),
-            label: 'History',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+        ),
       ),
     );
   }

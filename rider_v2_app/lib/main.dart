@@ -99,6 +99,7 @@ class _MyAppState extends State<MyApp> {
       child: MaterialApp(
         title: 'OK Delivery - Rider',
         theme: AppTheme.lightTheme,
+        debugShowCheckedModeBanner: false, // Remove debug banner
         home: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
             // Update API client token when authenticated
@@ -108,6 +109,17 @@ class _MyAppState extends State<MyApp> {
                   _apiClient!.updateToken(token);
                 }
               });
+              // Set rider ID in LocationService for Socket.io connection
+              // Use rider.id (from riders table) not user.id (from users table)
+              if (_locationBloc != null && state.user.rider?.id != null) {
+                final locationService = _locationBloc!.service;
+                locationService.setRiderId(state.user.rider!.id);
+                if (kDebugMode) {
+                  debugPrint(
+                    'MainApp: Set rider_id=${state.user.rider!.id} (user_id=${state.user.id})',
+                  );
+                }
+              }
             }
           },
           child: BlocBuilder<AuthBloc, AuthState>(

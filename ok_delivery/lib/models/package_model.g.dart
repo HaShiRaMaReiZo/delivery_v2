@@ -23,6 +23,9 @@ PackageModel _$PackageModelFromJson(Map<String, dynamic> json) => PackageModel(
   registeredAt: PackageModel._dateTimeFromJsonNullable(
     json['registered_at'] as String?,
   ),
+  deliveredAt: PackageModel._dateTimeFromJsonNullable(
+    json['delivered_at'] as String?,
+  ),
   createdAt: PackageModel._dateTimeFromJson(json['created_at'] as String),
   updatedAt: PackageModel._dateTimeFromJson(json['updated_at'] as String),
 );
@@ -43,6 +46,7 @@ Map<String, dynamic> _$PackageModelToJson(PackageModel instance) =>
       'package_description': instance.packageDescription,
       'status': instance.status,
       'registered_at': instance.registeredAt?.toIso8601String(),
+      'delivered_at': instance.deliveredAt?.toIso8601String(),
       'created_at': instance.createdAt.toIso8601String(),
       'updated_at': instance.updatedAt.toIso8601String(),
     };

@@ -1,7 +1,7 @@
 @extends('layouts.office')
 
 @section('title', 'Live Map')
-@section('page-title', 'Live Rider Map')
+@section('page-title',   'Live Rider Map')
 
 @section('content')
 <div class="space-y-6">
@@ -13,7 +13,7 @@
             </button>
             <label class="flex items-center space-x-2">
                 <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
-                <span class="text-sm text-gray-700">Auto-refresh (30s)</span>
+                <span class="text-sm text-gray-700">Manual refresh (30s)</span>
             </label>
         </div>
         <div class="text-sm text-gray-600">
@@ -89,16 +89,40 @@
 
 @push('scripts')
 <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 <script>
+    // Debug: Log script execution
+    console.log('Map script loaded at:', new Date().toISOString());
     let map;
     let markers = {};
     let autoRefreshInterval = null;
+    let isInitialLoad = true; // Track if this is the first load
     const API_BASE = '/api/office';
     const TOKEN = '{{ $apiToken }}';
 
     function initMap() {
+        try {
+            // Check if map container exists
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                console.error('Map container element not found');
+                return;
+            }
+            
         // Default center - Yangon, Myanmar
         const defaultCenter = [96.1951, 16.8661]; // [lng, lat] for MapLibre - Yangon, Myanmar
+            
+            // Check if maplibregl is loaded
+            if (typeof maplibregl === 'undefined') {
+                console.error('MapLibre GL is not loaded');
+                const loadingIndicator = document.getElementById('mapLoading');
+                if (loadingIndicator) {
+                    loadingIndicator.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Error: Map library failed to load. Please refresh the page.</p></div>';
+                }
+                return;
+            }
+            
+            console.log('Initializing map...');
         
         map = new maplibregl.Map({
             container: 'map',
@@ -147,6 +171,7 @@
 
         // Wait for map to load before adding markers
         map.on('load', function() {
+                console.log('Map loaded successfully');
             // Hide loading indicator
             const loadingIndicator = document.getElementById('mapLoading');
             if (loadingIndicator) {
@@ -166,6 +191,19 @@
                 loadingIndicator.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Error loading map. Please refresh the page.</p></div>';
             }
         });
+            
+            // Handle style loading errors
+            map.on('style.load', function() {
+                console.log('Map style loaded');
+            });
+            
+        } catch (error) {
+            console.error('Error initializing map:', error);
+            const loadingIndicator = document.getElementById('mapLoading');
+            if (loadingIndicator) {
+                loadingIndicator.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Error initializing map: ' + error.message + '</p><button onclick="initMap()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button></div>';
+            }
+        }
     }
 
     function loadRiderLocations() {
@@ -177,6 +215,13 @@
         console.log('Full URL:', `${API_BASE}/riders/locations`);
         console.log('Token exists:', !!TOKEN);
         console.log('Token length:', TOKEN ? TOKEN.length : 0);
+        
+        // Check if token exists
+        if (!TOKEN || TOKEN.trim() === '') {
+            console.error('API token is missing');
+            document.getElementById('riderList').innerHTML = '<p class="text-red-500 text-center">Error: Authentication token is missing. Please refresh the page.</p>';
+            return;
+        }
         
         fetch(`${API_BASE}/riders/locations`, {
             headers: {
@@ -191,6 +236,12 @@
                 // Log response text for debugging
                 const text = await res.text();
                 console.error('Error response:', text);
+                
+                // Handle 401 Unauthorized
+                if (res.status === 401) {
+                    throw new Error('Authentication failed. Please refresh the page to login again.');
+                }
+                
                 throw new Error(`HTTP error! status: ${res.status}, message: ${text || 'Unknown error'}`);
             }
             
@@ -211,20 +262,55 @@
         })
         .then(data => {
             console.log('Rider locations data:', data);
-            updateRiderList(data.riders || []);
-            updateMapMarkers(data.riders || []);
-            document.getElementById('riderCount').textContent = (data.riders || []).length;
+            const riders = data.riders || [];
+            
+            // Cache rider data for Socket.io updates (normalize to number keys)
+            riders.forEach(rider => {
+                if (rider.rider_id) {
+                    const riderIdNum = Number(rider.rider_id);
+                    riderDataCache[riderIdNum] = {
+                        name: rider.name,
+                        phone: rider.phone,
+                        status: rider.status,
+                        package_count: rider.package_count || 0
+                    };
+                    // Also cache with string key for compatibility
+                    riderDataCache[String(rider.rider_id)] = riderDataCache[riderIdNum];
+                }
+            });
+            
+            updateRiderList(riders);
+            updateMapMarkers(riders);
+            document.getElementById('riderCount').textContent = riders.length;
         })
         .catch(err => {
             console.error('Error loading rider locations:', err);
-            document.getElementById('riderList').innerHTML = '<p class="text-red-500 text-center">Error loading riders: ' + (err.message || 'Unknown error') + '</p>';
+            const errorMessage = err.message || 'Unknown error';
+            document.getElementById('riderList').innerHTML = '<p class="text-red-500 text-center">Error loading riders: ' + errorMessage + '</p>';
+            
+            // If map is loaded, show error on map too
+            if (map) {
+                const loadingIndicator = document.getElementById('mapLoading');
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'flex';
+                    loadingIndicator.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Error loading rider locations: ' + errorMessage + '</p><button onclick="loadRiderLocations()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button></div>';
+                }
+            }
         });
     }
 
     function updateMapMarkers(riders) {
-        // Clear existing markers
-        Object.values(markers).forEach(marker => marker.remove());
-        markers = {};
+        // Instead of clearing all markers, update existing ones and remove only those not in the new data
+        const newRiderIds = new Set(riders.map(r => Number(r.rider_id))); // Normalize to numbers
+        
+        // Remove markers for riders that are no longer in the list
+        Object.keys(markers).forEach(key => {
+            const riderId = Number(key);
+            if (!newRiderIds.has(riderId)) {
+                markers[key].remove();
+                delete markers[key];
+            }
+        });
 
         if (riders.length === 0) {
             return;
@@ -238,6 +324,52 @@
 
             const position = [parseFloat(rider.longitude), parseFloat(rider.latitude)]; // [lng, lat] for MapLibre
             bounds.push(position);
+            
+            // Normalize rider_id to number for consistent key lookup
+            const riderIdNum = Number(rider.rider_id);
+            const riderIdStr = String(rider.rider_id);
+            
+            // Check if marker already exists (from Socket.io update or previous API call)
+            const existingMarker = markers[riderIdNum] || markers[riderIdStr] || markers[rider.rider_id];
+            
+            if (existingMarker) {
+                // Update existing marker position and popup instead of creating duplicate
+                existingMarker.setLngLat(position);
+                
+                // Update popup content
+                const popupContent = `
+                    <div style="padding: 5px;">
+                        <h3 style="margin: 0 0 5px 0; font-size: 16px; font-weight: 600;">${rider.name}</h3>
+                        <p style="margin: 3px 0; font-size: 14px; color: #666;">${rider.phone}</p>
+                        <p style="margin: 3px 0; font-size: 14px;">Status: <span style="font-weight: 500;">${rider.status}</span></p>
+                        <p style="margin: 3px 0; font-size: 14px;">Packages: <span style="font-weight: 500;">${rider.package_count || 0}</span></p>
+                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #999;">Last update: ${rider.last_location_update ? new Date(rider.last_location_update).toLocaleString() : 'N/A'}</p>
+                    </div>
+                `;
+                const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupContent);
+                existingMarker.setPopup(popup);
+                
+                // Update marker label
+                const markerElement = existingMarker.getElement();
+                const nameLabel = markerElement.querySelector('div:last-child');
+                if (nameLabel && nameLabel.textContent !== rider.name) {
+                    nameLabel.textContent = rider.name;
+                }
+                
+                // Normalize key to number
+                if (!markers[riderIdNum]) {
+                    markers[riderIdNum] = existingMarker;
+                    // Clean up old keys
+                    if (markers[riderIdStr] && riderIdStr != String(riderIdNum)) {
+                        delete markers[riderIdStr];
+                    }
+                    if (markers[rider.rider_id] && rider.rider_id != riderIdNum) {
+                        delete markers[rider.rider_id];
+                    }
+                }
+                
+                return; // Skip creating new marker
+            }
 
             // Create a custom HTML element for the marker with rider name
             const el = document.createElement('div');
@@ -297,11 +429,13 @@
 
             marker.setPopup(popup);
 
-            markers[rider.rider_id] = marker;
+            // Store marker with normalized number key (riderIdNum already declared above)
+            markers[riderIdNum] = marker;
         });
 
-        // Fit map to show all riders
-        if (bounds.length > 0) {
+        // Only fit map to show all riders on initial load
+        // After that, preserve user's zoom/pan position
+        if (isInitialLoad && bounds.length > 0) {
             if (bounds.length === 1) {
                 // Single rider - just center on it
                 map.setCenter(bounds[0]);
@@ -321,6 +455,7 @@
                     maxZoom: 22 // Clamp to max zoom
                 });
             }
+            isInitialLoad = false; // Mark that initial load is complete
         }
     }
 
@@ -373,7 +508,7 @@
     function toggleAutoRefresh() {
         const checkbox = document.getElementById('autoRefresh');
         if (checkbox.checked) {
-            autoRefreshInterval = setInterval(loadRiderLocations, 30000); // 30 seconds
+            autoRefreshInterval = setInterval(loadRiderLocations, 30000); // 30 seconds (only for manual refresh)
         } else {
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
@@ -390,45 +525,324 @@
     });
 
     // Initialize map when page loads
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMap);
-    } else {
-        initMap();
+    // Wait for both DOM and MapLibre library to be ready
+    let mapLibreWaitAttempts = 0;
+    const MAX_WAIT_ATTEMPTS = 50; // 5 seconds max wait
+    
+    function waitForMapLibreAndInit() {
+        if (typeof maplibregl !== 'undefined') {
+            console.log('MapLibre GL is loaded, initializing map...');
+            initMap();
+        } else {
+            mapLibreWaitAttempts++;
+            if (mapLibreWaitAttempts >= MAX_WAIT_ATTEMPTS) {
+                console.error('MapLibre GL failed to load after waiting');
+                const loadingIndicator = document.getElementById('mapLoading');
+                if (loadingIndicator) {
+                    loadingIndicator.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Error: Map library failed to load. Please check your internet connection and refresh the page.</p><button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Refresh Page</button></div>';
+                }
+                return;
+            }
+            setTimeout(waitForMapLibreAndInit, 100);
+        }
     }
     
-    // WebSocket: Listen for real-time rider location updates
-    if (window.WebSocketHelper && window.WebSocketHelper.isConnected()) {
-        // Use 'private-' prefix for private channels in Pusher
-        const riderLocationChannel = window.WebSocketHelper.connect('private-office.riders.locations', 'rider.location.updated', function(data) {
-            // Update rider location on map in real-time
-            updateRiderLocationOnMap(data);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait a bit for scripts to load
+            setTimeout(waitForMapLibreAndInit, 100);
         });
-        
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            if (riderLocationChannel) {
-                window.WebSocketHelper.disconnect(riderLocationChannel);
-            }
-        });
+    } else {
+        // DOM already loaded, wait for MapLibre
+        setTimeout(waitForMapLibreAndInit, 100);
     }
+    
+    // Don't auto-refresh by default - use Socket.io for real-time updates instead
+    // Auto-refresh checkbox is now optional for manual periodic refresh only
+    
+    // Socket.io: Connect to JavaScript Location Tracker server for real-time rider location updates
+    let socket = null;
+    const LOCATION_TRACKER_URL = '{{ config("services.location_tracker.url", "http://localhost:3000") }}';
+    
+    function connectSocket() {
+        // Check if Socket.io is loaded
+        if (typeof io === 'undefined') {
+            console.warn('Socket.io library not loaded. Real-time updates will not work.');
+            return;
+        }
+        
+        // Check if LOCATION_TRACKER_URL is valid
+        if (!LOCATION_TRACKER_URL || LOCATION_TRACKER_URL === '') {
+            console.warn('LOCATION_TRACKER_URL is not configured. Real-time updates will not work.');
+            return;
+        }
+        
+        console.log('Connecting to Location Tracker server:', LOCATION_TRACKER_URL);
+        
+        try {
+            socket = io(LOCATION_TRACKER_URL, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: Infinity,
+                timeout: 5000
+            });
+            
+            socket.on('connect', () => {
+                console.log('Socket.io connected successfully');
+                
+                // Join office room to receive all rider locations
+                socket.emit('join:office');
+            });
+            
+            socket.on('connected', (data) => {
+                console.log('Socket.io connection confirmed:', data);
+            });
+            
+            // Receive all current rider locations when joining
+            socket.on('location:all', (locations) => {
+                console.log('Received all rider locations:', locations);
+                // Only update markers, don't reset map view
+                if (Array.isArray(locations)) {
+                locations.forEach(location => {
+                    updateRiderLocationOnMap(location);
+                });
+                }
+            });
+            
+            // Receive real-time location updates
+            socket.on('location:update', (data) => {
+                console.log('Location update received:', data);
+                updateRiderLocationOnMap(data);
+            });
+            
+            socket.on('disconnect', () => {
+                console.log('Socket.io disconnected. Will reconnect automatically...');
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.warn('Socket.io connection error:', error.message);
+                // Don't spam retries - let the reconnection handle it
+            });
+            
+            socket.on('error', (error) => {
+                console.error('Socket.io error:', error);
+            });
+        } catch (e) {
+            console.error('Failed to connect to Socket.io:', e);
+            // Retry after 5 seconds
+            setTimeout(() => {
+                connectSocket();
+            }, 5000);
+        }
+    }
+    
+    // Connect when page loads
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', connectSocket);
+    } else {
+        connectSocket();
+    }
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (socket) {
+            socket.disconnect();
+        }
+    });
+    
+    // Store rider data for creating markers
+    let riderDataCache = {};
     
     function updateRiderLocationOnMap(data) {
         if (!map || !data.latitude || !data.longitude) return;
         
-        const riderId = data.rider_id;
+        // IMPORTANT: Only use rider_id, not user_id
+        // The rider app now sends rider_id (from riders table), not user_id (from users table)
+        const riderId = data.rider_id || data.riderId;
+        if (!riderId) {
+            console.warn('updateRiderLocationOnMap: No rider_id in data', data);
+            return;
+        }
+        
+        // Normalize riderId to number for consistent key lookup (declare once)
+        const riderIdNum = Number(riderId);
+        const riderIdStr = String(riderId);
+        
+        // Safety check: If rider_id looks like a user_id (e.g., 10) but we have cached data for a different rider_id (e.g., 2),
+        // it means we're receiving wrong data - skip it
+        const cachedData = riderDataCache[riderIdNum] || riderDataCache[riderIdStr];
+        if (!cachedData) {
+            // No cached data means this rider_id hasn't been loaded from API yet
+            // This could be old data with wrong rider_id - skip it to prevent duplicates
+            console.warn('updateRiderLocationOnMap: No cached data for rider_id:', riderIdNum, '- skipping to prevent duplicate markers');
+            return;
+        }
+        
         const position = [parseFloat(data.longitude), parseFloat(data.latitude)];
         
-        // Update existing marker position smoothly
-        if (markers[riderId]) {
-            // Smoothly animate marker to new position
-            markers[riderId].setLngLat(position);
+        console.log('Updating rider location:', riderId, position);
+        
+        // Update existing marker position smoothly (without resetting map view)
+        
+        // Check both string and number keys (API might return string, Socket.io might return number)
+        const existingMarker = markers[riderIdNum] || markers[riderIdStr] || markers[riderId];
+        
+        if (existingMarker) {
+            // Normalize the key to ensure consistency (use number as standard)
+            if (!markers[riderIdNum]) {
+                markers[riderIdNum] = existingMarker;
+                // Clean up old keys if different
+                if (markers[riderIdStr] && riderIdStr != String(riderIdNum)) {
+                    delete markers[riderIdStr];
+                }
+                if (markers[riderId] && riderId != riderIdNum) {
+                    delete markers[riderId];
+                }
+            }
+            
+            // Smoothly update marker position without affecting map zoom/pan
+            existingMarker.setLngLat(position);
+            
+            // Update marker label if we have cached rider data
+            const riderName = cachedData.name || `Rider ${riderIdNum}`;
+            const markerElement = existingMarker.getElement();
+            const nameLabel = markerElement.querySelector('div:last-child');
+            if (nameLabel && nameLabel.textContent !== riderName) {
+                nameLabel.textContent = riderName;
+            }
+            
+            // Update popup with latest timestamp if available
+            if (data.timestamp || data.last_update) {
+                const timestamp = data.timestamp || data.last_update;
+                const popupContent = `
+                    <div style="padding: 5px;">
+                        <h3 style="margin: 0 0 5px 0; font-size: 16px; font-weight: 600;">${riderName}</h3>
+                        <p style="margin: 3px 0; font-size: 14px; color: #666;">${cachedData.phone || 'N/A'}</p>
+                        <p style="margin: 3px 0; font-size: 14px;">Status: <span style="font-weight: 500;">${cachedData.status || 'active'}</span></p>
+                        <p style="margin: 3px 0; font-size: 14px;">Packages: <span style="font-weight: 500;">${cachedData.package_count || 0}</span></p>
+                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #999;">Last update: ${new Date(timestamp).toLocaleString()}</p>
+                    </div>
+                `;
+                const popup = new maplibregl.Popup({ offset: 25 })
+                    .setHTML(popupContent);
+                existingMarker.setPopup(popup);
+            }
         } else {
-            // Marker doesn't exist yet - reload all locations to get full rider data
-            // This will create the marker with proper name and details
-            loadRiderLocations();
+            // Marker doesn't exist yet - but check if we should update existing instead of creating duplicate
+            // This handles cases where rider_id format differs (string vs number)
+            console.log('Marker not found for rider_id:', riderId, 'Available markers:', Object.keys(markers));
+            
+            // Check if there's a marker with the same rider but different key format
+            // Try to find by matching cached rider names
+            // Note: cachedData already declared above, reuse it
+            let foundExisting = false;
+            if (cachedData && cachedData.name) {
+                // Search for existing marker by checking all markers and their cached data
+                for (const [key, marker] of Object.entries(markers)) {
+                    const keyData = riderDataCache[Number(key)] || riderDataCache[String(key)] || riderDataCache[key];
+                    if (keyData && keyData.name === cachedData.name) {
+                        console.log('Found existing marker with different key:', key, 'updating instead of creating new');
+                        // Normalize to number key
+                        markers[riderIdNum] = marker;
+                        if (key != riderIdNum) {
+                            delete markers[key];
+                        }
+                        marker.setLngLat(position);
+                        foundExisting = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (foundExisting) {
+                return; // Already updated, don't create duplicate
+            }
+            
+            // Marker doesn't exist yet - create it without reloading the entire map
+            // IMPORTANT: Only create marker if we have cached rider data (from API)
+            // This prevents creating markers with wrong rider_id (e.g., user_id instead of rider_id)
+            if (!cachedData || !cachedData.name) {
+                console.warn('Cannot create marker for rider_id:', riderIdNum, '- no cached rider data. Waiting for API load...');
+                return; // Don't create marker without proper rider data
+            }
+            
+            // Use cached rider data
+            const riderName = cachedData.name;
+            const riderPhone = cachedData.phone || 'N/A';
+            const riderStatus = cachedData.status || 'active';
+            const packageCount = cachedData.package_count || 0;
+            
+            // Create marker element
+            const el = document.createElement('div');
+            el.style.display = 'flex';
+            el.style.flexDirection = 'column';
+            el.style.alignItems = 'center';
+            el.style.cursor = 'pointer';
+            
+            const markerDot = document.createElement('div');
+            markerDot.className = 'rider-marker';
+            markerDot.style.width = '20px';
+            markerDot.style.height = '20px';
+            markerDot.style.borderRadius = '50%';
+            markerDot.style.backgroundColor = '#ef4444';
+            markerDot.style.border = '3px solid white';
+            markerDot.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            
+            const nameLabel = document.createElement('div');
+            nameLabel.textContent = riderName;
+            nameLabel.style.marginTop = '4px';
+            nameLabel.style.padding = '2px 6px';
+            nameLabel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            nameLabel.style.color = 'white';
+            nameLabel.style.fontSize = '11px';
+            nameLabel.style.fontWeight = '600';
+            nameLabel.style.borderRadius = '4px';
+            nameLabel.style.whiteSpace = 'nowrap';
+            nameLabel.style.textAlign = 'center';
+            nameLabel.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)';
+            
+            el.appendChild(markerDot);
+            el.appendChild(nameLabel);
+            
+            // Create marker
+            const marker = new maplibregl.Marker({
+                element: el,
+                anchor: 'bottom'
+            })
+            .setLngLat(position)
+            .addTo(map);
+            
+            // Create popup
+            const timestamp = data.timestamp || data.last_update || new Date().toISOString();
+            const popupContent = `
+                <div style="padding: 5px;">
+                    <h3 style="margin: 0 0 5px 0; font-size: 16px; font-weight: 600;">${riderName}</h3>
+                    <p style="margin: 3px 0; font-size: 14px; color: #666;">${riderPhone}</p>
+                    <p style="margin: 3px 0; font-size: 14px;">Status: <span style="font-weight: 500;">${riderStatus}</span></p>
+                    <p style="margin: 3px 0; font-size: 14px;">Packages: <span style="font-weight: 500;">${packageCount}</span></p>
+                    <p style="margin: 5px 0 0 0; font-size: 12px; color: #999;">Last update: ${new Date(timestamp).toLocaleString()}</p>
+                </div>
+            `;
+            
+            const popup = new maplibregl.Popup({ offset: 25 })
+                .setHTML(popupContent);
+            
+            marker.setPopup(popup);
+            // Store marker with normalized number key
+            markers[riderIdNum] = marker;
+            // Also cache rider data with number key if not already cached
+            if (!riderDataCache[riderIdNum]) {
+                riderDataCache[riderIdNum] = {
+                    name: riderName,
+                    phone: riderPhone,
+                    status: riderStatus,
+                    package_count: packageCount
+                };
+            }
         }
     }
 </script>
 @endpush
 @endsection
-

@@ -1,5 +1,5 @@
 class ApiEndpoints {
-  static const String baseUrl = 'https://ok-delivery.onrender.com';
+  static const String baseUrl = 'https://ok-delivery-service.onrender.com';
 
   // Auth
   static const String login = '/api/auth/login';
@@ -24,4 +24,8 @@ class ApiEndpoints {
   // Tracking
   static String merchantPackageLiveLocation(int id) =>
       '/api/merchant/packages/$id/live-location';
+
+  // Socket.io (JavaScript Location Tracker server)
+  static const String websocketBaseUrl =
+      'https://location-tracker-js.onrender.com';
 }

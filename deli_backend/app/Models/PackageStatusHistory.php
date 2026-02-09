@@ -28,6 +28,15 @@ class PackageStatusHistory extends Model
         'created_at' => 'datetime',
     ];
 
+    /**
+     * Additional attributes to include in JSON responses.
+     *
+     * - changed_by_name: Human-readable name of the user who changed the status
+     */
+    protected $appends = [
+        'changed_by_name',
+    ];
+
     // Relationships
     public function package(): BelongsTo
     {
@@ -37,5 +46,17 @@ class PackageStatusHistory extends Model
     public function changedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'changed_by_user_id');
+    }
+
+    /**
+     * Accessor for changed_by_name.
+     *
+     * This lets the API return the real user's display name directly
+     * on each status history record, so the mobile apps don't need
+     * to perform extra lookups.
+     */
+    public function getChangedByNameAttribute(): ?string
+    {
+        return $this->changedBy?->name;
     }
 }

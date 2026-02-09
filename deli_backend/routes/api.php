@@ -13,6 +13,9 @@ use App\Http\Controllers\Api\NotificationController;
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 
+// Location store route (called by Node.js server, no auth required)
+Route::post('/rider/location/store', [RiderLocationController::class, 'store']);
+
     // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
@@ -27,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Merchant routes
     Route::prefix('merchant')->middleware('role:merchant')->group(function () {
+        // Package routes (scoped to authenticated merchant)
         Route::get('/packages', [MerchantPackageController::class, 'index']);
         Route::post('/packages/bulk', [MerchantPackageController::class, 'bulkStore']);
         
@@ -46,6 +50,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Rider routes
     Route::prefix('rider')->middleware('role:rider')->group(function () {
+        // Routes with rider_id in path - must come before routes without it
+        Route::get('/packages/{rider_id}/history', [RiderPackageController::class, 'history']);
+        
+        // Routes without rider_id (uses authenticated user's rider_id)
         Route::get('/packages', [RiderPackageController::class, 'index']);
         Route::get('/packages/{id}', [RiderPackageController::class, 'show']);
         Route::put('/packages/{id}/status', [RiderPackageController::class, 'updateStatus']);

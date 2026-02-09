@@ -40,4 +40,8 @@ return [
         'project_id' => env('FIREBASE_PROJECT_ID'),
     ],
 
+    'location_tracker' => [
+        'url' => env('LOCATION_TRACKER_URL', 'http://localhost:3000'),
+    ],
+
 ];

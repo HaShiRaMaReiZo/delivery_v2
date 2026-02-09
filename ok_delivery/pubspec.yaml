@@ -61,6 +61,9 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
 
+  # Socket.io
+  socket_io_client: ^2.0.3+1
+
   # Localization
   flutter_localizations:
     sdk: flutter

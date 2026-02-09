@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/utils/date_utils.dart' as myanmar_date;
 import 'draft_date_detail_screen.dart';
+import 'draft_widgets.dart';
 
 class DraftScreen extends StatefulWidget {
   const DraftScreen({super.key});
@@ -106,149 +107,141 @@ class _DraftScreenState extends State<DraftScreen> {
     }
   }
 
+  String _formatLastModified(DateTime lastUpdated) {
+    final now = myanmar_date.MyanmarDateUtils.getMyanmarNow();
+    final updatedLocal = myanmar_date.MyanmarDateUtils.toMyanmarTime(
+      lastUpdated,
+    );
+    final diff = now.difference(updatedLocal);
+
+    if (diff.inMinutes < 1) {
+      return 'Just now';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
+    } else {
+      final days = diff.inDays;
+      return '$days day${days == 1 ? '' : 's'} ago';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.draftPackages),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDrafts,
-            tooltip: AppLocalizations.of(context)!.refresh,
+    final l10n = AppLocalizations.of(context)!;
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                l10n.errorLoadingDrafts,
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _loadDrafts,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.yellow400,
+                  foregroundColor: AppTheme.neutral900,
+                ),
+                child: Text(l10n.retry),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.errorLoadingDrafts,
-                    style: TextStyle(color: Colors.red),
+        ),
+      );
+    }
+
+    if (_drafts.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.neutral50,
+        body: Center(
+          child: Text(
+            l10n.noDraftPackages,
+            style: const TextStyle(fontSize: 18, color: AppTheme.neutral500),
+          ),
+        ),
+      );
+    }
+
+    final grouped = _groupDraftsByDate();
+    final sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return Scaffold(
+      backgroundColor: AppTheme.neutral50,
+      body: SafeArea(
+        child: Column(
+          children: [
+            DraftHeader(totalDraftGroups: sortedDates.length),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadDrafts,
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
                   ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: _loadDrafts,
-                    child: Text(AppLocalizations.of(context)!.retry),
-                  ),
-                ],
-              ),
-            )
-          : _drafts.isEmpty
-          ? Center(
-              child: Text(
-                AppLocalizations.of(context)!.noDraftPackages,
-                style: const TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadDrafts,
-              child: Builder(
-                builder: (context) {
-                  final grouped = _groupDraftsByDate();
-                  final sortedDates = grouped.keys.toList()
-                    ..sort((a, b) => b.compareTo(a));
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: sortedDates.length,
-                    itemBuilder: (context, index) {
-                      final date = sortedDates[index];
-                      final packages = grouped[date]!;
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          onTap: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => DraftDateDetailScreen(
-                                  date: date,
-                                  packages: packages,
-                                ),
-                              ),
-                            );
-
-                            if (result == true) {
-                              _loadDrafts();
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.asset(
-                                      'assets/images/draft_card.png',
-                                      width: 50,
-                                      height: 50,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                                color: AppTheme.primaryBlue,
-                                                child: const Icon(
-                                                  Icons.calendar_today,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _formatDate(date),
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.darkBlue,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${packages.length} package${packages.length == 1 ? '' : 's'}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                  itemCount: sortedDates.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == sortedDates.length) {
+                      return const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: DraftInfoBox(),
                       );
-                    },
-                  );
-                },
+                    }
+
+                    final date = sortedDates[index];
+                    final packages = grouped[date]!;
+                    final totalAmount = packages.fold<double>(
+                      0,
+                      (sum, p) => sum + p.amount,
+                    );
+                    final latestUpdated = packages
+                        .map((p) => p.updatedAt)
+                        .reduce((a, b) => a.isAfter(b) ? a : b);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: DraftDateCard(
+                        title: _formatDate(date),
+                        lastModifiedText: _formatLastModified(latestUpdated),
+                        packageCount: packages.length,
+                        totalAmount: totalAmount,
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DraftDateDetailScreen(
+                                date: date,
+                                packages: packages,
+                              ),
+                            ),
+                          );
+
+                          if (result == true) {
+                            _loadDrafts();
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

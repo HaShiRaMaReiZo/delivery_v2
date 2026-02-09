@@ -17,10 +17,19 @@ use PDOException;
 
 class PackageController extends Controller
 {
+    /**
+     * Get packages for authenticated merchant
+     * Route: GET /api/merchant/packages
+     */
     public function index(Request $request)
     {
         $merchant = $request->user()->merchant;
-        
+        if (!$merchant) {
+            return response()->json([
+                'message' => 'Merchant profile not found',
+            ], 404);
+        }
+
         // Only load necessary relationships - statusHistory is heavy and not needed for list view
         // Only load specific columns to reduce data transfer
         // Exclude draft packages from regular list
@@ -28,7 +37,8 @@ class PackageController extends Controller
             ->where('is_draft', false)
             ->with(['currentRider:id,name,phone', 'statusHistory' => function ($query) {
                 // Only get the latest status history entry for each package
-                $query->orderBy('created_at', 'desc')->limit(1);
+                // and include the user who changed it for proper display
+                $query->with('changedBy')->orderBy('created_at', 'desc')->limit(1);
             }])
             ->orderBy('created_at', 'desc')
             ->paginate(20);
@@ -249,7 +259,7 @@ class PackageController extends Controller
         $merchant = $request->user()->merchant;
         
         $package = Package::where('merchant_id', $merchant->id)
-            ->with(['merchant', 'currentRider', 'statusHistory', 'deliveryProof', 'codCollection'])
+            ->with(['merchant', 'currentRider', 'statusHistory.changedBy', 'deliveryProof', 'codCollection'])
             ->findOrFail($id);
 
         return response()->json($package);
@@ -260,12 +270,15 @@ class PackageController extends Controller
         $merchant = $request->user()->merchant;
         
         $package = Package::where('merchant_id', $merchant->id)
-            ->with(['currentRider', 'statusHistory'])
+            ->with(['currentRider', 'statusHistory.changedBy'])
             ->findOrFail($id);
 
         return response()->json([
             'package' => $package,
-            'status_history' => $package->statusHistory()->orderBy('created_at', 'desc')->get(),
+            'status_history' => $package->statusHistory()
+                ->with('changedBy')
+                ->orderBy('created_at', 'desc')
+                ->get(),
         ]);
     }
 
@@ -322,10 +335,10 @@ class PackageController extends Controller
             ]);
         }
 
-        // Only return live location if status is on_the_way
-        if ($package->status !== 'on_the_way') {
+        // Only return live location if status is ready_for_delivery or on_the_way (in transit)
+        if ($package->status !== 'on_the_way' && $package->status !== 'ready_for_delivery') {
             return response()->json([
-                'message' => 'Package is not on the way',
+                'message' => 'Package is not in transit',
                 'location' => null,
                 'package' => [
                     'id' => $package->id,
@@ -494,14 +507,6 @@ class PackageController extends Controller
                     ];
                     
                     $package = Package::create($packageDataToSave);
-
-                    if ($imageError) {
-                        $imageUploadErrors[] = [
-                            'index' => $index,
-                            'customer_name' => $packageData['customer_name'],
-                            'error' => $imageError,
-                        ];
-                    }
 
                     if ($imageError) {
                         $imageUploadErrors[] = [

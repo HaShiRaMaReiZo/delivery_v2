@@ -19,6 +19,7 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     on<LocationStartEvent>(_onStart);
     on<LocationStopEvent>(_onStop);
     on<LocationErrorEvent>(_onError);
+    on<LocationUpdatePackageIdEvent>(_onUpdatePackageId);
   }
 
   final LocationService service;
@@ -28,6 +29,8 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
   _backgroundStreamSubscription;
   location_package.Location? _backgroundLocation;
   int? _currentPackageId;
+  Position? _lastGoodPosition; // Track last known good GPS position
+  int _poorAccuracyCount = 0; // Count consecutive poor accuracy readings
 
   Future<void> _onStart(
     LocationStartEvent event,
@@ -206,9 +209,9 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     // Configure background location settings for better battery efficiency
     try {
       await _backgroundLocation?.changeSettings(
-        accuracy: location_package.LocationAccuracy.high,
-        interval: 5000, // Update every 5 seconds
-        distanceFilter: 10, // Or every 10 meters (whichever comes first)
+        accuracy: location_package.LocationAccuracy.high, // Use high accuracy
+        interval: 3000, // Update every 3 seconds
+        distanceFilter: 5, // Or every 5 meters (whichever comes first)
       );
       if (kDebugMode) {
         debugPrint('LocationBloc: Background location settings configured');
@@ -238,37 +241,58 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     if (kDebugMode) {
       debugPrint('LocationBloc: Starting background location stream...');
     }
-    _backgroundStreamSubscription = _backgroundLocation?.onLocationChanged
-        .listen(
-          (location_package.LocationData locationData) {
-            if (locationData.latitude != null &&
-                locationData.longitude != null) {
-              // Send location update to server
-              service
-                  .update(
-                    latitude: locationData.latitude!,
-                    longitude: locationData.longitude!,
-                    packageId: _currentPackageId,
-                    speed: locationData.speed,
-                    heading: locationData.heading,
-                  )
-                  .catchError((error) {
-                    // Log error and emit error event
-                    if (kDebugMode) {
-                      debugPrint('Location update failed (background): $error');
-                    }
-                    add(LocationErrorEvent(error.toString()));
-                  });
-            }
-          },
-          onError: (error) {
-            if (kDebugMode) {
-              debugPrint('Background location stream error: $error');
-            }
-            add(LocationErrorEvent(error.toString()));
-          },
-          cancelOnError: false, // Continue tracking even if errors occur
-        );
+    _backgroundStreamSubscription = _backgroundLocation?.onLocationChanged.listen(
+      (location_package.LocationData locationData) {
+        if (locationData.latitude != null && locationData.longitude != null) {
+          // Send location update to server
+          if (kDebugMode) {
+            debugPrint(
+              'LocationBloc: 📍 BACKGROUND location update: lat=${locationData.latitude}, lng=${locationData.longitude}, packageId: $_currentPackageId',
+            );
+            debugPrint(
+              'LocationBloc: Sending background location update to server...',
+            );
+          }
+          service
+              .update(
+                latitude: locationData.latitude!,
+                longitude: locationData.longitude!,
+                packageId: _currentPackageId,
+                speed: locationData.speed,
+                heading: locationData.heading,
+              )
+              .then((_) {
+                if (kDebugMode) {
+                  debugPrint(
+                    'LocationBloc: ✅ Background location update sent successfully',
+                  );
+                }
+              })
+              .catchError((error) {
+                // Log error and emit error event
+                if (kDebugMode) {
+                  debugPrint(
+                    'LocationBloc: ❌ Location update failed (background): $error',
+                  );
+                }
+                add(LocationErrorEvent(error.toString()));
+              });
+        } else {
+          if (kDebugMode) {
+            debugPrint(
+              'LocationBloc: ⚠️ Background location data missing lat/lng: $locationData',
+            );
+          }
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('Background location stream error: $error');
+        }
+        add(LocationErrorEvent(error.toString()));
+      },
+      cancelOnError: false, // Continue tracking even if errors occur
+    );
 
     // Also start foreground tracking for immediate updates
     if (kDebugMode) {
@@ -277,16 +301,25 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
     _streamSubscription =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10, // Update every 10 meters
-            timeLimit: Duration(seconds: 5), // Or every 5 seconds
+            accuracy: LocationAccuracy.best, // Use best GPS accuracy
+            distanceFilter: 5, // Update every 5 meters
+            timeLimit: Duration(seconds: 3), // Or every 3 seconds
           ),
         ).listen(
           (Position position) {
+            // Check GPS quality and warn user if accuracy is poor
+            _checkGpsQuality(position);
+
             // Send location update to server
             if (kDebugMode) {
               debugPrint(
-                'LocationBloc: Foreground stream received position: ${position.latitude}, ${position.longitude}',
+                'LocationBloc: 📍 FOREGROUND location update: lat=${position.latitude}, lng=${position.longitude}, packageId: $_currentPackageId',
+              );
+              debugPrint(
+                'LocationBloc: Accuracy: ${position.accuracy}m, Timestamp: ${position.timestamp}',
+              );
+              debugPrint(
+                'LocationBloc: Sending foreground location update to server...',
               );
             }
             service
@@ -300,7 +333,7 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
                 .then((_) {
                   if (kDebugMode) {
                     debugPrint(
-                      'LocationBloc: Foreground location update sent successfully',
+                      'LocationBloc: ✅ Foreground location update sent successfully',
                     );
                   }
                 })
@@ -324,8 +357,8 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
         debugPrint('Fetching initial location...');
       }
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10), // Don't wait too long
+        desiredAccuracy: LocationAccuracy.best, // Use best GPS accuracy
+        timeLimit: const Duration(seconds: 15), // Wait longer for GPS fix
       );
       if (kDebugMode) {
         debugPrint(
@@ -384,6 +417,142 @@ class LocationBloc extends Bloc<LocationEvent, LocationState> {
       emit(LocationErrorState(event.error));
     }
     // If already tracking, silently continue (errors are logged in service)
+  }
+
+  void _onUpdatePackageId(
+    LocationUpdatePackageIdEvent event,
+    Emitter<LocationState> emit,
+  ) {
+    if (kDebugMode) {
+      debugPrint(
+        'LocationBloc: ⚡ Updating package ID from $_currentPackageId to ${event.packageId}',
+      );
+      debugPrint(
+        'LocationBloc: Next location update will include packageId: ${event.packageId}',
+      );
+    }
+    _currentPackageId = event.packageId;
+
+    // If location tracking is active, send an immediate update with the new package ID
+    // This ensures the merchant app receives location updates as soon as package ID is set
+    if (state is LocationActiveState) {
+      _sendImmediateLocationUpdate();
+    }
+  }
+
+  /// Send an immediate location update with current package ID
+  Future<void> _sendImmediateLocationUpdate() async {
+    try {
+      if (kDebugMode) {
+        debugPrint(
+          'LocationBloc: Sending immediate location update with packageId: $_currentPackageId',
+        );
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best, // Use best GPS accuracy
+        timeLimit: const Duration(seconds: 10), // Wait longer for GPS fix
+      );
+
+      // Check GPS quality
+      _checkGpsQuality(position);
+
+      // Send update with current package ID
+      await service.update(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        packageId: _currentPackageId,
+        speed: position.speed,
+        heading: position.heading,
+      );
+
+      if (kDebugMode) {
+        debugPrint(
+          'LocationBloc: Immediate location update sent successfully with packageId: $_currentPackageId',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'LocationBloc: Failed to send immediate location update: $e',
+        );
+      }
+      // Don't emit error - this is a non-critical update
+    }
+  }
+
+  /// Check GPS quality and emit warnings if accuracy is poor
+  void _checkGpsQuality(Position position) {
+    // Check if accuracy is poor (likely using network location instead of GPS)
+    if (position.accuracy > 100) {
+      // Very poor accuracy - likely network location
+      _poorAccuracyCount++;
+
+      if (_poorAccuracyCount >= 3) {
+        // After 3 consecutive poor readings, warn the user
+        if (kDebugMode) {
+          debugPrint(
+            'LocationBloc: ⚠️ GPS accuracy is poor (${position.accuracy}m). This may be network location instead of GPS.',
+          );
+        }
+
+        // Emit warning state (user-friendly message)
+        add(
+          LocationErrorEvent(
+            'GPS accuracy is poor (${position.accuracy.toStringAsFixed(0)}m). '
+            'Please ensure:\n'
+            '• GPS is enabled in device settings\n'
+            '• You are outdoors or have clear view of sky\n'
+            '• Mock location is disabled in Developer Options',
+          ),
+        );
+
+        // Try to open location settings to help user
+        Geolocator.openLocationSettings().catchError((e) {
+          if (kDebugMode) {
+            debugPrint('LocationBloc: Could not open location settings: $e');
+          }
+          return false;
+        });
+
+        _poorAccuracyCount = 0; // Reset counter
+      }
+    } else if (position.accuracy <= 20) {
+      // Good GPS accuracy - reset counter
+      _poorAccuracyCount = 0;
+      _lastGoodPosition = position;
+    }
+
+    // Check if location seems to have jumped significantly (possible mock location)
+    if (_lastGoodPosition != null) {
+      double distance = Geolocator.distanceBetween(
+        _lastGoodPosition!.latitude,
+        _lastGoodPosition!.longitude,
+        position.latitude,
+        position.longitude,
+      );
+
+      // If location jumped more than 1km in 3 seconds, likely mock location
+      if (distance > 1000 &&
+          position.timestamp
+                  .difference(_lastGoodPosition!.timestamp)
+                  .inSeconds <
+              3) {
+        if (kDebugMode) {
+          debugPrint(
+            'LocationBloc: ⚠️ Location jumped ${distance.toStringAsFixed(0)}m in ${position.timestamp.difference(_lastGoodPosition!.timestamp).inSeconds}s. Possible mock location.',
+          );
+        }
+
+        add(
+          LocationErrorEvent(
+            'Location accuracy issue detected. '
+            'Please disable "Mock location app" in Developer Options if enabled.',
+          ),
+        );
+      }
+    }
   }
 
   @override

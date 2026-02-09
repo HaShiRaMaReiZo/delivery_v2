@@ -45,6 +45,7 @@ class ImagePreviewScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
+        toolbarHeight: 48,
         title: title != null
             ? Text(title!, style: const TextStyle(color: Colors.white))
             : null,

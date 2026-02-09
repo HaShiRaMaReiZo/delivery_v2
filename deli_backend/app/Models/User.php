@@ -25,6 +25,8 @@ class User extends Authenticatable
         'phone',
         'role',
         'status',
+        'merchant_id',
+        'rider_id',
     ];
 
     /**
@@ -57,8 +59,18 @@ class User extends Authenticatable
         return $this->hasOne(Merchant::class);
     }
 
+    public function merchantProfile()
+    {
+        return $this->belongsTo(Merchant::class, 'merchant_id');
+    }
+
     public function rider()
     {
         return $this->hasOne(Rider::class);
+    }
+
+    public function riderProfile()
+    {
+        return $this->belongsTo(Rider::class, 'rider_id');
     }
 }

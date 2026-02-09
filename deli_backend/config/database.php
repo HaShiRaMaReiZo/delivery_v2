@@ -16,7 +16,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'mysql'),
+    'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -60,7 +60,11 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT', false),
+                PDO::MYSQL_ATTR_SSL_CIPHER => env('MYSQL_ATTR_SSL_CIPHER'),
+            ], function($value) {
+                return $value !== null && $value !== '';
+            }) : [],
         ],
 
         'mariadb' => [
@@ -95,7 +99,14 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('DB_SSLMODE', 'require'),
+            // Connection pooling and performance optimizations for Transaction Mode Pooler
+            'options' => extension_loaded('pdo_pgsql') ? array_filter([
+                PDO::ATTR_PERSISTENT => false, // Don't use persistent connections (causes issues with poolers)
+                PDO::ATTR_EMULATE_PREPARES => false, // Use native prepared statements
+                PDO::ATTR_TIMEOUT => 3, // Reduced timeout for faster failure detection
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // Better error handling
+            ]) : [],
         ],
 
         'sqlsrv' => [

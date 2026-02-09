@@ -68,26 +68,37 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppTheme.lightBeige,
+        backgroundColor: AppTheme.neutral50,
         appBar: AppBar(
-          title: Text(widget.merchant.businessName),
-          backgroundColor: AppTheme.primaryBlue,
-          foregroundColor: Colors.white,
+          title: Text(
+            widget.merchant.businessName,
+            style: const TextStyle(
+              color: AppTheme.neutral900,
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
+            ),
+          ),
+          backgroundColor: AppTheme.neutral50,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          foregroundColor: AppTheme.neutral900,
+          iconTheme: const IconThemeData(color: AppTheme.neutral900),
         ),
         body: Column(
           children: [
             // Merchant Info Card
             Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.neutral200),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -99,34 +110,34 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryBlue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          color: AppTheme.yellow400.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.store,
-                          color: AppTheme.darkBlue,
+                          color: AppTheme.neutral900,
                           size: 24,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               widget.merchant.businessName,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.darkBlue,
-                                  ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.neutral900,
+                                fontSize: 18,
+                              ),
                             ),
                             if (widget.merchant.businessAddress != null) ...[
                               const SizedBox(height: 4),
                               Text(
                                 widget.merchant.businessAddress!,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
+                                style: const TextStyle(
+                                  color: AppTheme.neutral600,
                                   fontSize: 14,
                                 ),
                               ),
@@ -135,35 +146,35 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: AppTheme.darkBlue,
-                          borderRadius: BorderRadius.circular(20),
+                          color: AppTheme.yellow500,
+                          shape: BoxShape.circle,
                         ),
-                        child: Text(
-                          '${widget.packages.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                        child: Center(
+                          child: Text(
+                            '${widget.packages.length}',
+                            style: const TextStyle(
+                              color: AppTheme.neutral900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                   if (widget.merchant.businessPhone != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Row(
                       children: [
-                        Icon(Icons.phone, size: 16, color: Colors.grey[600]),
+                        Icon(Icons.phone, size: 16, color: AppTheme.neutral600),
                         const SizedBox(width: 8),
                         Text(
                           widget.merchant.businessPhone!,
-                          style: TextStyle(
-                            color: Colors.grey[800],
+                          style: const TextStyle(
+                            color: AppTheme.neutral700,
                             fontSize: 14,
                           ),
                         ),
@@ -198,7 +209,7 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       itemCount: widget.packages.length,
                       itemBuilder: (context, index) {
                         return _buildPackageCard(
@@ -222,10 +233,13 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
+                      border: Border(
+                        top: BorderSide(color: AppTheme.neutral200, width: 1),
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
                           offset: const Offset(0, -2),
                         ),
                       ],
@@ -250,7 +264,7 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
+                                      AppTheme.neutral900,
                                     ),
                                   ),
                                 )
@@ -259,15 +273,19 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
                             isLoading
                                 ? 'Confirming...'
                                 : 'Confirm Pickup (${widget.packages.length} packages)',
-                            style: const TextStyle(fontSize: 16),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.darkBlue,
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppTheme.yellow500,
+                            foregroundColor: AppTheme.neutral900,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                             ),
+                            elevation: 0,
                           ),
                         ),
                       ),
@@ -282,106 +300,112 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
   }
 
   Widget _buildPackageCard(BuildContext context, PackageModel package) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row with tracking code and status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (package.trackingCode != null)
-                  Text(
-                    package.trackingCode!,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.darkBlue,
-                    ),
-                  )
-                else
-                  Text(
-                    'Package #${package.id}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.darkBlue,
-                    ),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(package.status).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _getStatusLabel(package.status),
-                    style: TextStyle(
-                      color: _getStatusColor(package.status),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.neutral50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.neutral200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with tracking code and status
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  package.trackingCode ?? 'Package #${package.id}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.neutral900,
+                    fontSize: 15,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Customer info
-            _buildInfoRow(Icons.person, package.customerName),
-            const SizedBox(height: 8),
-            _buildInfoRow(Icons.phone, package.customerPhone),
-            const SizedBox(height: 8),
-            _buildInfoRow(Icons.location_on, package.deliveryAddress),
-
-            const SizedBox(height: 12),
-
-            // Payment info
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      package.paymentType == 'cod'
-                          ? Icons.money
-                          : Icons.credit_card,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      package.paymentType.toUpperCase(),
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
                 ),
-                Text(
-                  '${package.amount.toStringAsFixed(0)} MMK',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.darkBlue,
+                decoration: BoxDecoration(
+                  color: AppTheme.yellow500.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _getStatusLabel(package.status),
+                  style: const TextStyle(
+                    color: AppTheme.neutral900,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-            ),
-
-            // Timestamp
-            if (package.assignedAt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Assigned: ${MyanmarDateUtils.formatDateTime(package.assignedAt!)}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+
+          // Customer info
+          _buildInfoRow(Icons.person_outline, package.customerName),
+          const SizedBox(height: 10),
+          _buildInfoRow(Icons.phone_outlined, package.customerPhone),
+          const SizedBox(height: 10),
+          _buildInfoRow(Icons.location_on_outlined, package.deliveryAddress),
+
+          const SizedBox(height: 16),
+
+          // Payment info
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    package.paymentType == 'cod'
+                        ? Icons.money_outlined
+                        : Icons.credit_card_outlined,
+                    size: 16,
+                    color: AppTheme.neutral600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    package.paymentType.toUpperCase(),
+                    style: const TextStyle(
+                      color: AppTheme.neutral600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '${package.amount.toStringAsFixed(0)} MMK',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.neutral900,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+
+          // Timestamp
+          if (package.assignedAt != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Assigned: ${MyanmarDateUtils.formatDateTime(package.assignedAt!)}',
+              style: const TextStyle(color: AppTheme.neutral500, fontSize: 11),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -389,31 +413,16 @@ class _MerchantPickupScreenState extends State<MerchantPickupScreen> {
   Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: AppTheme.neutral600),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(color: Colors.grey[800], fontSize: 14),
+            style: const TextStyle(color: AppTheme.neutral700, fontSize: 14),
           ),
         ),
       ],
     );
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case 'ready_for_delivery':
-        return Colors.blue;
-      case 'on_the_way':
-        return Colors.orange;
-      case 'assigned_to_rider':
-        return Colors.purple;
-      case 'picked_up':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
   }
 
   String _getStatusLabel(String? status) {

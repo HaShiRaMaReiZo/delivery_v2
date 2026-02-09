@@ -15,7 +15,14 @@ class PackageController extends Controller
 {
     public function index(Request $request)
     {
-        $rider = $request->user()->rider;
+        $user = $request->user();
+        $rider = $user->rider;
+        
+        if (!$rider) {
+            return response()->json([
+                'message' => 'Rider profile not found'
+            ], 404);
+        }
         
         // Check if we need to include delivered packages
         $includeDelivered = $request->query('include_delivered', 'false') === 'true' || $request->query('include_delivered') === true;
@@ -31,7 +38,7 @@ class PackageController extends Controller
                     'delivered',         // Delivered packages
                     'cancelled'          // Cancelled, rider needs to return to office
                 ])
-                ->with(['merchant', 'statusHistory'])
+                ->with(['merchant', 'statusHistory.changedBy'])
                 ->orderBy('created_at', 'desc')
                 ->get();
         } else {
@@ -47,7 +54,7 @@ class PackageController extends Controller
                     'on_the_way',        // Currently being delivered
                     'cancelled'          // Cancelled, rider needs to return to office
                 ])
-                ->with(['merchant', 'statusHistory'])
+                ->with(['merchant', 'statusHistory.changedBy'])
                 ->orderBy('created_at', 'desc')
                 ->get();
         }
@@ -57,10 +64,17 @@ class PackageController extends Controller
 
     public function show(Request $request, $id)
     {
-        $rider = $request->user()->rider;
+        $user = $request->user();
+        $rider = $user->rider;
+        
+        if (!$rider) {
+            return response()->json([
+                'message' => 'Rider profile not found'
+            ], 404);
+        }
         
         $package = Package::where('current_rider_id', $rider->id)
-            ->with(['merchant', 'statusHistory', 'deliveryProof', 'codCollection'])
+            ->with(['merchant', 'statusHistory.changedBy', 'deliveryProof', 'codCollection'])
             ->findOrFail($id);
 
         return response()->json($package);
@@ -260,8 +274,8 @@ class PackageController extends Controller
     public function uploadProof(Request $request, $id)
     {
         $request->validate([
-            'proof_type' => 'required|in:photo,signature',
-            'proof_data' => 'required',
+            'proof_type' => 'nullable|in:photo,signature',
+            'proof_data' => 'nullable',
             'delivery_latitude' => 'nullable|numeric',
             'delivery_longitude' => 'nullable|numeric',
             'delivered_to_name' => 'nullable|string',
@@ -274,7 +288,8 @@ class PackageController extends Controller
         $package = Package::where('current_rider_id', $rider->id)
             ->findOrFail($id);
 
-        // Handle proof upload
+        // Handle proof upload (optional)
+        if ($request->has('proof_type') && $request->has('proof_data')) {
         $proofData = $request->proof_data;
         if ($request->proof_type === 'photo' && $request->hasFile('proof_data')) {
             $proofData = $request->file('proof_data')->store('delivery_proofs', 'public');
@@ -292,9 +307,37 @@ class PackageController extends Controller
             'notes' => $request->notes,
             'created_at' => now(),
         ]);
+        }
+
+        // Update package status to delivered
+        $package->status = 'delivered';
+        if (!$package->delivered_at) {
+            $package->delivered_at = now();
+        }
+        $package->save();
+
+        // Get delivery location (from request or rider's current location)
+        $latitude = $request->delivery_latitude ?? $rider->current_latitude;
+        $longitude = $request->delivery_longitude ?? $rider->current_longitude;
+
+        // Log status history with delivery location
+        PackageStatusHistory::create([
+            'package_id' => $package->id,
+            'status' => 'delivered',
+            'changed_by_user_id' => $request->user()->id,
+            'changed_by_type' => 'rider',
+            'notes' => $request->notes ?? 'Package delivered with proof',
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'created_at' => now(),
+        ]);
+
+        // Broadcast status change via WebSocket
+        event(new PackageStatusChanged($package->id, 'delivered', $package->merchant_id));
 
         return response()->json([
-            'message' => 'Delivery proof uploaded successfully',
+            'message' => 'Delivery proof uploaded successfully and package marked as delivered',
+            'package' => $package->load(['merchant', 'statusHistory']),
         ]);
     }
 
@@ -442,5 +485,50 @@ class PackageController extends Controller
             'confirmed_count' => count($confirmed),
             'confirmed_package_ids' => $confirmed,
         ]);
+    }
+
+    /**
+     * Get delivered packages for the current month only
+     * This endpoint returns packages that were delivered in the current month
+     * (e.g., if it's January, only January deliveries; if February, only February, etc.)
+     */
+    /**
+     * Get delivery history for current month
+     * Route: GET /api/rider/packages/{rider_id}/history
+     */
+    public function history(Request $request, $rider_id)
+    {
+        $user = $request->user();
+        $rider = $user->rider;
+        
+        if (!$rider) {
+            return response()->json([
+                'message' => 'Rider profile not found'
+            ], 404);
+        }
+        
+        // Validate that the rider_id in the path matches the authenticated user's rider
+        // Use relationship ID (works even if rider_id column is null)
+        if ($rider->id != $rider_id) {
+            return response()->json([
+                'message' => 'Unauthorized: You can only access your own history'
+            ], 403);
+        }
+        
+        // Get current month start and end dates
+        $now = now();
+        $startOfMonth = $now->copy()->startOfMonth();
+        $endOfMonth = $now->copy()->endOfMonth();
+        
+        // Get delivered packages for current month only
+        $packages = Package::where('current_rider_id', $rider_id)
+            ->where('status', 'delivered')
+            ->whereNotNull('delivered_at')
+            ->whereBetween('delivered_at', [$startOfMonth, $endOfMonth])
+            ->with(['merchant', 'statusHistory.changedBy'])
+            ->orderBy('delivered_at', 'desc')
+            ->get();
+        
+        return response()->json($packages);
     }
 }

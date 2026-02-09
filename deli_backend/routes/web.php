@@ -18,8 +18,18 @@ Route::get('/', function () {
 	return redirect()->route('office.login');
 });
 
+// Handle Chrome DevTools requests gracefully
+Route::get('/.well-known/appspecific/com.chrome.devtools.json', function () {
+	return response()->json([]);
+});
+
 // Route to check database schema (diagnostic)
 Route::get('/check-schema', function () {
+	// Only allow in non-production environments unless explicitly enabled
+	if (!app()->environment(['local', 'development', 'staging']) && !env('ENABLE_DEBUG_ROUTES', false)) {
+		abort(404);
+	}
+
 	try {
 		$hasIsDraft = \Illuminate\Support\Facades\Schema::hasColumn('packages', 'is_draft');
 		
@@ -77,6 +87,11 @@ Route::get('/check-schema', function () {
 
 // Route to seed users (useful for resetting database or initial setup)
 Route::get('/seed-users', function () {
+	// Only allow in non-production environments unless explicitly enabled
+	if (!app()->environment(['local', 'development', 'staging']) && !env('ENABLE_DEBUG_ROUTES', false)) {
+		abort(404);
+	}
+
 	try {
 		Artisan::call('db:seed', ['--class' => 'OfficeUserSeeder', '--force' => true]);
 		$output = Artisan::output();

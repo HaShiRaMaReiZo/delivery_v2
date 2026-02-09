@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../models/package_model.dart';
 import '../repository/home_repository.dart';
 import 'home_event.dart';
 import 'home_state.dart';
@@ -15,7 +16,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     HomeFetchRequested event,
     Emitter<HomeState> emit,
   ) async {
-    emit(HomeLoading());
+    // If already loaded, keep showing cached data (don't show loading again)
+    // Only show loading if we're in initial state
+    final currentState = state;
+    if (currentState is! HomeLoaded) {
+      emit(HomeLoading());
+    }
 
     try {
       // Fetch active packages and delivered packages in parallel
@@ -66,11 +72,41 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         }
       }
 
+      // Get upcoming packages (prioritize deliveries, then pickups)
+      // Limit to top 5 most urgent packages
+      final upcomingPackages = <PackageModel>[];
+
+      // First, add delivery packages (ready_for_delivery, on_the_way)
+      final deliveryPackages = packages.where((pkg) {
+        return pkg.isForDelivery &&
+            (pkg.status == 'ready_for_delivery' || pkg.status == 'on_the_way');
+      }).toList();
+      upcomingPackages.addAll(deliveryPackages);
+
+      // Then, add pickup packages (assigned_to_rider for pickup)
+      final pickupPackages = packages.where((pkg) {
+        return pkg.isForPickup && pkg.status == 'assigned_to_rider';
+      }).toList();
+      upcomingPackages.addAll(pickupPackages);
+
+      // Sort by assignedAt (most recent first) and limit to 5
+      upcomingPackages.sort((a, b) {
+        final aAssigned = a.assignedAt;
+        final bAssigned = b.assignedAt;
+        if (aAssigned == null && bAssigned == null) return 0;
+        if (aAssigned == null) return 1;
+        if (bAssigned == null) return -1;
+        return bAssigned.compareTo(aAssigned);
+      });
+
+      final limitedPackages = upcomingPackages.take(5).toList();
+
       emit(
         HomeLoaded(
           assignedDeliveries: assignedDeliveries,
           assignedPickups: assignedPickups,
           deliveredThisMonth: deliveredThisMonth,
+          upcomingPackages: limitedPackages,
         ),
       );
     } catch (e) {

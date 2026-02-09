@@ -12,6 +12,8 @@ class PackageStatusHistoryModel {
   final int? changedByUserId;
   @JsonKey(name: 'changed_by_type')
   final String? changedByType;
+  @JsonKey(name: 'changed_by_name')
+  final String? changedByName;
   final String? notes;
   @JsonKey(fromJson: _coordinateFromJson)
   final double? latitude;
@@ -40,6 +42,7 @@ class PackageStatusHistoryModel {
     required this.status,
     this.changedByUserId,
     this.changedByType,
+    this.changedByName,
     this.notes,
     this.latitude,
     this.longitude,

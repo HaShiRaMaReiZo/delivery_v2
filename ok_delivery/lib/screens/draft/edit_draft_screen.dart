@@ -206,6 +206,7 @@ class _EditDraftScreenState extends State<EditDraftScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        toolbarHeight: 48,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

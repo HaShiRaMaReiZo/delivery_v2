@@ -10,6 +10,7 @@ import '../../core/api/api_endpoints.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import 'settings_screen.dart';
+import 'profile_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -21,7 +22,18 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with AutomaticKeepAliveClientMixin {
+  // Simple in-memory cache for the session to avoid re-calling APIs on tab switch
+  static UserModel? _cachedUser;
+  static int _cachedTotalPackages = 0;
+  static int _cachedPendingPackages = 0;
+  static int _cachedCompletedPackages = 0;
+  static double _cachedMonthlyRevenue = 0.0;
+  static int _cachedMonthlyDeliveries = 0;
+  static int _cachedSuccessPercent = 0;
+  static bool _cacheLoaded = false;
+
   final _authRepository = AuthRepository(
     ApiClient.create(baseUrl: ApiEndpoints.baseUrl),
   );
@@ -29,12 +41,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ApiClient.create(baseUrl: ApiEndpoints.baseUrl),
   );
 
+  // _hasLoaded is informational; actual guard is _cacheLoaded
+  bool _hasLoaded = false;
   UserModel? _currentUser;
   int _totalPackages = 0;
+  // Stats kept for potential future UI (currently unused)
   int _pendingPackages = 0;
   int _completedPackages = 0;
-  bool _isLoading = true;
+  double _rating = 4.8; // Default rating, can be calculated from reviews later
+  int _successPercent = 92; // Default, can be calculated from delivered/total
+  double _monthlyRevenue = 0.0;
+  int _monthlyDeliveries = 0;
+  bool _isLoading = false;
+  bool _isFetching = false;
   String? _error;
+  bool _isPullToRefresh = false;
 
   @override
   void initState() {
@@ -43,7 +64,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadProfileData();
   }
 
-  Future<void> _loadProfileData() async {
+  @override
+  bool get wantKeepAlive => true;
+
+  Future<void> _loadProfileData({bool forceRefresh = false}) async {
+    // Use cached data if available and not forcing refresh
+    if (_cacheLoaded && !forceRefresh) {
+      setState(() {
+        _currentUser = _cachedUser ?? _currentUser;
+        _totalPackages = _cachedTotalPackages;
+        _pendingPackages = _cachedPendingPackages;
+        _completedPackages = _cachedCompletedPackages;
+        _monthlyRevenue = _cachedMonthlyRevenue;
+        _monthlyDeliveries = _cachedMonthlyDeliveries;
+        _successPercent = _cachedSuccessPercent;
+        _isLoading = false;
+        _hasLoaded = true;
+      });
+      return;
+    }
+
+    // If already loading, skip duplicate calls
+    if (_isFetching) return;
+
+    _isFetching = true;
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -83,6 +128,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       int total = allPackages.length;
       int pending = 0;
       int completed = 0;
+      double monthlyRevenue = 0.0;
+      int monthlyDeliveries = 0;
+      final now = DateTime.now();
+      final thisMonthStart = DateTime(now.year, now.month, 1);
 
       for (final package in allPackages) {
         if (package.status != null &&
@@ -93,434 +142,331 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         if (package.status == 'delivered') {
           completed++;
+          // Calculate monthly stats
+          if (package.deliveredAt != null) {
+            if (package.deliveredAt!.isAfter(thisMonthStart) ||
+                package.deliveredAt!.isAtSameMomentAs(thisMonthStart)) {
+              monthlyDeliveries++;
+              monthlyRevenue += package.amount;
+            }
+          }
         }
       }
+
+      // Calculate success percent
+      int successPercent = total > 0 ? ((completed / total) * 100).round() : 0;
 
       setState(() {
         _totalPackages = total;
         _pendingPackages = pending;
         _completedPackages = completed;
+        _monthlyRevenue = monthlyRevenue;
+        _monthlyDeliveries = monthlyDeliveries;
+        _successPercent = successPercent;
         _isLoading = false;
+        _hasLoaded = true;
+        // save cache
+        _cachedUser = _currentUser;
+        _cachedTotalPackages = total;
+        _cachedPendingPackages = pending;
+        _cachedCompletedPackages = completed;
+        _cachedMonthlyRevenue = monthlyRevenue;
+        _cachedMonthlyDeliveries = monthlyDeliveries;
+        _cachedSuccessPercent = successPercent;
+        _cacheLoaded = true;
       });
     } catch (e) {
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    } finally {
+      _isFetching = false;
     }
+  }
+
+  String _formatRevenue(double amount) {
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)}M';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)}K';
+    }
+    return amount.toStringAsFixed(0);
+  }
+
+  String _getTrendText() {
+    // This is a placeholder - in real app, compare with previous month
+    return '23% increase from last month';
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final merchant = _currentUser?.merchant ?? widget.user.merchant;
+    final displayName =
+        merchant?.businessName ?? _currentUser?.name ?? widget.user.name;
+    // Always show user's email first, then merchant business email as fallback
+    final email = _currentUser?.email ?? widget.user.email;
+
+    // When profile is loading for the very first time, show full-screen loader.
+    final bool _showFullScreenLoader = _isLoading && !_hasLoaded;
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.profile),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadProfileData,
-            tooltip: AppLocalizations.of(context)!.refresh,
-          ),
-        ],
-      ),
-      body: _isLoading
+      backgroundColor: AppTheme.neutral50,
+      body: _showFullScreenLoader
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
+          : _error != null && !_hasLoaded
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     AppLocalizations.of(context)!.errorLoadingProfile,
-                    style: TextStyle(color: Colors.red),
+                    style: const TextStyle(color: Colors.red),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: _loadProfileData,
+                    onPressed: () => _loadProfileData(forceRefresh: true),
                     child: Text(AppLocalizations.of(context)!.retry),
                   ),
                 ],
               ),
             )
-          : RefreshIndicator(
-              onRefresh: _loadProfileData,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          : Stack(
+              children: [
+                Column(
                   children: [
-                    // Subtitle
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(
-                        AppLocalizations.of(context)!.manageYourAccount,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
+                    // Custom Header
+                    Stack(
+                      children: [
+                        ProfileHeader(
+                          displayName: displayName,
+                          email: email,
+                          totalPackages: _totalPackages,
+                          rating: _rating,
+                          successPercent: _successPercent,
+                        ),
+                        Positioned(
+                          top: MediaQuery.of(context).padding.top + 24,
+                          right: 24,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.settings,
+                              color: Colors.white,
+                            ),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => SettingsScreen(
+                                    onLanguageChanged: widget.onLanguageChanged,
+                                  ),
+                                ),
+                              );
+                              if (mounted) {
+                                _loadProfileData(forceRefresh: true);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Content
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          if (mounted) {
+                            setState(() {
+                              _isPullToRefresh = true;
+                            });
+                          }
+                          try {
+                            await _loadProfileData(forceRefresh: true);
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isPullToRefresh = false;
+                              });
+                            }
+                          }
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height: 24),
+                              // Performance Card
+                              PerformanceCard(
+                                totalDeliveries: _monthlyDeliveries,
+                                revenue:
+                                    '${_formatRevenue(_monthlyRevenue)} MMK',
+                                trendText: _getTrendText(),
+                              ),
+                              const SizedBox(height: 24),
+                              // Account Section
+                              ProfileSection(
+                                title: 'ACCOUNT',
+                                items: [
+                                  ProfileMenuItem(
+                                    icon: Icons.person,
+                                    title: 'Edit Profile',
+                                    onTap: () {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!.editProfileFeatureComingSoon,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  ProfileMenuItem(
+                                    icon: Icons.shield,
+                                    title: 'Privacy & Security',
+                                    onTap: () {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Privacy & Security feature coming soon',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  ProfileMenuItem(
+                                    icon: Icons.notifications,
+                                    title: 'Notifications',
+                                    onTap: () {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!.notificationsFeatureComingSoon,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              // Support Section
+                              ProfileSection(
+                                title: 'SUPPORT',
+                                items: [
+                                  ProfileMenuItem(
+                                    icon: Icons.help_outline,
+                                    title: 'Help & Support',
+                                    onTap: () {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Help & Support coming soon',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  ProfileMenuItem(
+                                    icon: Icons.info_outline,
+                                    title: 'About',
+                                    subtitle: 'v1.0.0',
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('About'),
+                                          content: const Text(
+                                            'OK Delivery v1.0.0',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(context).pop(),
+                                              child: const Text('OK'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              // Logout Button
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppTheme.neutral200,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () => _showLogoutDialog(context),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 16,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(
+                                            Icons.logout,
+                                            color: AppTheme.neutral900,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!.logout,
+                                            style: const TextStyle(
+                                              color: AppTheme.neutral900,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-
-                    // User/Shop Owner Information Card
-                    _buildUserInfoCard(context),
-
-                    const SizedBox(height: 16),
-
-                    // Shop Information Card
-                    _buildShopInfoCard(context),
-
-                    const SizedBox(height: 16),
-
-                    // Settings and Notifications Card
-                    _buildSettingsCard(context),
                   ],
                 ),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildUserInfoCard(BuildContext context) {
-    final merchant = _currentUser?.merchant;
-    final displayName = merchant?.businessName ?? _currentUser?.name ?? 'N/A';
-    final role = AppLocalizations.of(context)!.shopOwner;
-
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Profile Avatar
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.person, color: Colors.white, size: 30),
-              ),
-              const SizedBox(width: 16),
-              // Name and Role
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.black,
-                      ),
+                if (_isLoading && _hasLoaded && !_isPullToRefresh)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.03),
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      role,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              // Edit Button
-              TextButton(
-                onPressed: () {
-                  // TODO: Navigate to edit profile screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(
-                          context,
-                        )!.editProfileFeatureComingSoon,
-                      ),
-                    ),
-                  );
-                },
-                child: Text(
-                  AppLocalizations.of(context)!.edit,
-                  style: const TextStyle(color: AppTheme.primaryBlue),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Statistics Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatItem(
-                context,
-                value: _totalPackages.toString(),
-                label: AppLocalizations.of(context)!.total,
-                valueColor: AppTheme.black,
-              ),
-              _buildStatItem(
-                context,
-                value: _pendingPackages.toString(),
-                label: AppLocalizations.of(context)!.pending,
-                valueColor: AppTheme.primaryBlue,
-              ),
-              _buildStatItem(
-                context,
-                value: _completedPackages.toString(),
-                label: AppLocalizations.of(context)!.completed,
-                valueColor: Colors.green,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-    BuildContext context, {
-    required String value,
-    required String label,
-    required Color valueColor,
-  }) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: valueColor,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShopInfoCard(BuildContext context) {
-    final merchant = _currentUser?.merchant;
-
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            AppLocalizations.of(context)!.shopInformation,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.black,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildInfoRow(
-            context,
-            icon: Icons.home,
-            label: AppLocalizations.of(context)!.shopName,
-            value: merchant?.businessName ?? 'N/A',
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(
-            context,
-            icon: Icons.phone,
-            label: AppLocalizations.of(context)!.phoneNumber,
-            value: merchant?.businessPhone ?? _currentUser?.phone ?? 'N/A',
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(
-            context,
-            icon: Icons.email,
-            label: AppLocalizations.of(context)!.email,
-            value: merchant?.businessEmail ?? _currentUser?.email ?? 'N/A',
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(
-            context,
-            icon: Icons.location_on,
-            label: AppLocalizations.of(context)!.location,
-            value: merchant?.businessAddress ?? 'N/A',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryBlue.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: AppTheme.primaryBlue, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.black,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSettingsCard(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildSettingsItem(
-            context,
-            icon: Icons.settings,
-            title: AppLocalizations.of(context)!.settings,
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    onLanguageChanged: widget.onLanguageChanged,
                   ),
-                ),
-              );
-              // Reload profile data after returning from settings
-              if (mounted) {
-                _loadProfileData();
-              }
-            },
-          ),
-          const Divider(height: 32),
-          _buildSettingsItem(
-            context,
-            icon: Icons.notifications,
-            title: AppLocalizations.of(context)!.notifications,
-            onTap: () {
-              // TODO: Navigate to notifications screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    AppLocalizations.of(
-                      context,
-                    )!.notificationsFeatureComingSoon,
-                  ),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 32),
-          _buildSettingsItem(
-            context,
-            icon: Icons.logout,
-            title: AppLocalizations.of(context)!.logout,
-            onTap: () => _showLogoutDialog(context),
-            isDestructive: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    bool isDestructive = false,
-  }) {
-    final iconColor = isDestructive ? Colors.red : AppTheme.primaryBlue;
-    final textColor = isDestructive ? Colors.red : AppTheme.black;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: textColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
-          ],
-        ),
-      ),
     );
   }
 

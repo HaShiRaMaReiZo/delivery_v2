@@ -44,41 +44,102 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppTheme.darkBlue,
-        unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.white,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: [
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.home_outlined),
-            activeIcon: const Icon(Icons.home),
-            label: AppLocalizations.of(context)!.home,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: AppTheme.neutral200, width: 1)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(
+                  icon: Icons.home_outlined,
+                  filledIcon: Icons.home,
+                  label: AppLocalizations.of(context)!.home,
+                  index: 0,
+                ),
+                _buildNavItem(
+                  icon: Icons.drafts_outlined,
+                  filledIcon: Icons.drafts,
+                  label: AppLocalizations.of(context)!.draft,
+                  index: 1,
+                ),
+                _buildNavItem(
+                  icon: Icons.location_on_outlined,
+                  filledIcon: Icons.location_on,
+                  label: AppLocalizations.of(context)!.track,
+                  index: 2,
+                ),
+                _buildNavItem(
+                  icon: Icons.person_outline,
+                  filledIcon: Icons.person,
+                  label: AppLocalizations.of(context)!.profile,
+                  index: 3,
+                ),
+              ],
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.drafts_outlined),
-            activeIcon: const Icon(Icons.drafts),
-            label: AppLocalizations.of(context)!.draft,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.track_changes_outlined),
-            activeIcon: const Icon(Icons.track_changes),
-            label: AppLocalizations.of(context)!.track,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.person_outline),
-            activeIcon: const Icon(Icons.person),
-            label: AppLocalizations.of(context)!.profile,
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required IconData icon,
+    required IconData filledIcon,
+    required String label,
+    required int index,
+  }) {
+    final isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentIndex = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? filledIcon : icon,
+              size: 24,
+              color: isSelected ? const Color(0xFFEAB308) : AppTheme.neutral400,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSelected ? AppTheme.yellow500 : AppTheme.neutral400,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 2),
+              Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.yellow500,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

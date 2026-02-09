@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../l10n/app_localizations.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/user_model.dart';
 import '../../models/package_model.dart';
@@ -7,7 +6,7 @@ import '../../repositories/package_repository.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../core/utils/date_utils.dart' as myanmar_date;
-import '../register_package/register_package_screen.dart';
+import 'home_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   final UserModel user;
@@ -25,7 +24,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _registeredThisMonth = 0;
   int _pendingThisMonth = 0;
+  int _inTransitThisMonth = 0;
   int _deliveredThisMonth = 0;
+  double _revenueToday = 0.0;
+  List<PackageModel> _recentPackages = [];
+  int _draftCount = 0;
   bool _isLoading = true;
 
   @override
@@ -58,13 +61,29 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      // Load drafts count
+      try {
+        final drafts = await _packageRepository.getDrafts();
+        _draftCount = drafts.length;
+      } catch (e) {
+        // Ignore draft loading errors
+        _draftCount = 0;
+      }
+
       final now = myanmar_date.MyanmarDateUtils.getMyanmarNow();
+      final today = DateTime(now.year, now.month, now.day);
       final currentMonth = DateTime(now.year, now.month, 1);
       final nextMonth = DateTime(now.year, now.month + 1, 1);
 
       int registeredThisMonth = 0;
       int pendingThisMonth = 0;
+      int inTransitThisMonth = 0;
       int deliveredThisMonth = 0;
+      double revenueToday = 0.0;
+
+      // Get recent packages (sorted by updated_at, most recent first)
+      final recentPackages = allPackages.where((p) => p.status != null).toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
       for (final package in allPackages) {
         // Count registered this month (using registered_at)
@@ -78,51 +97,50 @@ class _HomeScreenState extends State<HomeScreen> {
               registeredDate.isBefore(nextMonth)) {
             registeredThisMonth++;
           }
-        }
 
-        // Count pending this month (packages not delivered/cancelled/returned
-        // that were registered or updated in current month)
-        if (package.status != null &&
-            package.status != 'delivered' &&
-            package.status != 'cancelled' &&
-            package.status != 'returned_to_merchant') {
-          // Check if package was registered or updated in current month
-          final registeredDate = package.registeredAt != null
-              ? myanmar_date.MyanmarDateUtils.toMyanmarTime(
-                  package.registeredAt!,
-                )
-              : null;
-          final updatedDate = myanmar_date.MyanmarDateUtils.toMyanmarTime(
-            package.updatedAt,
+          // Calculate revenue for today (sum of amounts registered today)
+          final registeredDateOnly = DateTime(
+            registeredDate.year,
+            registeredDate.month,
+            registeredDate.day,
           );
-
-          final isInCurrentMonth =
-              (registeredDate != null &&
-                  registeredDate.isAfter(
-                    currentMonth.subtract(const Duration(days: 1)),
-                  ) &&
-                  registeredDate.isBefore(nextMonth)) ||
-              (updatedDate.isAfter(
-                    currentMonth.subtract(const Duration(days: 1)),
-                  ) &&
-                  updatedDate.isBefore(nextMonth));
-
-          if (isInCurrentMonth) {
-            pendingThisMonth++;
+          if (registeredDateOnly.isAtSameMomentAs(today)) {
+            revenueToday += package.amount;
           }
         }
 
-        // Count delivered this month (packages with status 'delivered'
-        // that were updated in current month)
-        if (package.status == 'delivered') {
+        // Count statuses this month
+        if (package.status != null) {
           final updatedDate = myanmar_date.MyanmarDateUtils.toMyanmarTime(
             package.updatedAt,
           );
-          if (updatedDate.isAfter(
+          final isInCurrentMonth =
+              updatedDate.isAfter(
                 currentMonth.subtract(const Duration(days: 1)),
               ) &&
-              updatedDate.isBefore(nextMonth)) {
-            deliveredThisMonth++;
+              updatedDate.isBefore(nextMonth);
+
+          if (isInCurrentMonth) {
+            switch (package.status) {
+              case 'delivered':
+                deliveredThisMonth++;
+                break;
+              case 'on_the_way':
+              case 'ready_for_delivery':
+                inTransitThisMonth++;
+                break;
+              case 'assigned_to_rider':
+              case 'picked_up':
+                // These are pending delivery
+                pendingThisMonth++;
+                break;
+              default:
+                if (package.status != 'cancelled' &&
+                    package.status != 'returned_to_merchant') {
+                  pendingThisMonth++;
+                }
+                break;
+            }
           }
         }
       }
@@ -131,7 +149,10 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _registeredThisMonth = registeredThisMonth;
           _pendingThisMonth = pendingThisMonth;
+          _inTransitThisMonth = inTransitThisMonth;
           _deliveredThisMonth = deliveredThisMonth;
+          _revenueToday = revenueToday;
+          _recentPackages = recentPackages.take(3).toList();
           _isLoading = false;
         });
       }
@@ -146,244 +167,65 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final merchantName = widget.user.merchant?.businessName ?? widget.user.name;
+    final merchantEmail =
+        widget.user.merchant?.businessEmail ?? widget.user.email;
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.home),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDashboardData,
-            tooltip: AppLocalizations.of(context)!.refresh,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Profile Overview Box
-            _buildProfileOverviewBox(context),
-            const SizedBox(height: 16),
-
-            // Stats Row - 3 boxes
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatBox(
-                    context: context,
-                    title: AppLocalizations.of(context)!.registered,
-                    count: _isLoading ? '...' : _registeredThisMonth.toString(),
-                    icon: Icons.add_circle_outline,
-                    color: AppTheme.primaryBlue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatBox(
-                    context: context,
-                    title: AppLocalizations.of(context)!.pending,
-                    count: _isLoading ? '...' : _pendingThisMonth.toString(),
-                    icon: Icons.pending_outlined,
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatBox(
-                    context: context,
-                    title: AppLocalizations.of(context)!.delivered,
-                    count: _isLoading ? '...' : _deliveredThisMonth.toString(),
-                    icon: Icons.check_circle_outline,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Register Package Box
-            _buildRegisterPackageBox(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileOverviewBox(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Profile Avatar
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryBlue,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 16),
-          // Profile Info
-          Expanded(
+      backgroundColor: AppTheme.neutral50,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadDashboardData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  widget.user.merchant?.businessName ?? widget.user.name,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.black,
-                  ),
+                // Header
+                HomeHeader(
+                  merchantName: merchantName,
+                  merchantEmail: merchantEmail,
+                  isLoading: _isLoading,
+                  registeredThisMonth: _registeredThisMonth,
+                  revenueToday: _revenueToday,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.user.merchant?.businessEmail ?? widget.user.email,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+
+                // Main content
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Quick action - Register package
+                      const RegisterPackageCard(),
+                      const SizedBox(height: 24),
+
+                      // Status overview (3 cards)
+                      StatusOverviewRow(
+                        pendingCount: _pendingThisMonth,
+                        deliveredCount: _deliveredThisMonth,
+                        inTransitCount: _inTransitThisMonth,
+                        isLoading: _isLoading,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Recent Activity
+                      if (_recentPackages.isNotEmpty)
+                        RecentActivitySection(recentPackages: _recentPackages),
+                      if (_recentPackages.isNotEmpty)
+                        const SizedBox(height: 24),
+
+                      // Quick Actions
+                      QuickActionsSection(draftCount: _draftCount),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          // Arrow Icon
-          Icon(Icons.chevron_right, color: Colors.grey[400]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatBox({
-    required BuildContext context,
-    required String title,
-    required String count,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      height: 130, // Fixed height to ensure all cards are same size
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(icon, color: color, size: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                count,
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.black,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRegisterPackageBox(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const RegisterPackageScreen(),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(24.0),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppTheme.darkBlue, AppTheme.primaryBlue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.darkBlue.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.add_circle,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.registerPackage,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    AppLocalizations.of(context)!.createNewDeliveryPackage,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward, color: Colors.white),
-          ],
         ),
       ),
     );

@@ -1,3 +1,5 @@
+import '../../../models/package_model.dart';
+
 class HomeState {
   const HomeState();
 
@@ -7,6 +9,7 @@ class HomeState {
     required int assignedDeliveries,
     required int assignedPickups,
     required int deliveredThisMonth,
+    required List<PackageModel> upcomingPackages,
   }) = HomeLoaded;
   const factory HomeState.error(String message) = HomeError;
 }
@@ -23,11 +26,13 @@ class HomeLoaded extends HomeState {
   final int assignedDeliveries;
   final int assignedPickups;
   final int deliveredThisMonth;
+  final List<PackageModel> upcomingPackages;
 
   const HomeLoaded({
     required this.assignedDeliveries,
     required this.assignedPickups,
     required this.deliveredThisMonth,
+    required this.upcomingPackages,
   });
 }
 
@@ -36,4 +41,3 @@ class HomeError extends HomeState {
 
   const HomeError(this.message);
 }
-

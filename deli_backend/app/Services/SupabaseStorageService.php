@@ -17,6 +17,17 @@ class SupabaseStorageService
         // Use service_role key if available (bypasses RLS), otherwise use anon key
         $this->key = env('SUPABASE_SERVICE_ROLE_KEY') ?: env('SUPABASE_KEY');
         $this->bucket = env('SUPABASE_BUCKET', 'package-images');
+        
+        // Validate URL format
+        if ($this->url && !filter_var($this->url, FILTER_VALIDATE_URL)) {
+            Log::warning('Invalid SUPABASE_URL format', ['url' => $this->url]);
+            $this->url = null;
+        }
+        
+        // Remove trailing slash if present
+        if ($this->url) {
+            $this->url = rtrim($this->url, '/');
+        }
     }
 
     /**
@@ -30,10 +41,11 @@ class SupabaseStorageService
     public function upload(string $path, string $content, ?string &$errorMessage = null): ?string
     {
         if (!$this->url || !$this->key) {
-            $errorMessage = 'Supabase credentials not configured (missing SUPABASE_URL or SUPABASE_KEY)';
-            Log::error('Supabase credentials not configured', [
+            $errorMessage = 'Supabase not configured. Image upload skipped. Package saved without image.';
+            Log::warning('Supabase credentials not configured - image upload skipped', [
                 'url_set' => !empty($this->url),
                 'key_set' => !empty($this->key),
+                'hint' => 'Set SUPABASE_URL and SUPABASE_KEY in Render environment variables to enable image uploads',
             ]);
             return null;
         }
@@ -123,17 +135,36 @@ class SupabaseStorageService
                 return null;
             }
         } catch (\Exception $e) {
-            // Sanitize exception message to ensure valid UTF-8
+            // Check if it's a DNS resolution or connection error
             $exceptionMsg = mb_convert_encoding($e->getMessage(), 'UTF-8', 'UTF-8');
             $exceptionMsg = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $exceptionMsg);
             $exceptionMsg = substr($exceptionMsg, 0, 200);
-            $errorMessage = 'Exception: ' . $exceptionMsg;
             
-            Log::error('Supabase upload exception', [
-                'path' => $path,
-                'bucket' => $this->bucket,
-                'error' => $exceptionMsg,
-            ]);
+            // Check if it's a DNS resolution error
+            if (strpos($exceptionMsg, 'Could not resolve host') !== false || 
+                strpos($exceptionMsg, 'getaddrinfo') !== false ||
+                strpos($exceptionMsg, 'cURL error 6') !== false) {
+                $errorMessage = 'DNS Error: Cannot resolve Supabase hostname. Please check SUPABASE_URL environment variable in Render.';
+                
+                Log::error('Supabase upload DNS error', [
+                    'path' => $path,
+                    'bucket' => $this->bucket,
+                    'url' => $this->url,
+                    'error' => $exceptionMsg,
+                    'error_type' => 'DNS Resolution',
+                    'hint' => 'Check SUPABASE_URL in Render environment variables',
+                ]);
+            } else {
+                $errorMessage = 'Exception: ' . $exceptionMsg;
+                
+                Log::error('Supabase upload exception', [
+                    'path' => $path,
+                    'bucket' => $this->bucket,
+                    'url' => $this->url,
+                    'error' => $exceptionMsg,
+                ]);
+            }
+            
             return null;
         }
     }

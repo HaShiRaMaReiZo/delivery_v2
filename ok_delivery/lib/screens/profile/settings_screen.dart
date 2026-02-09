@@ -62,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
       appBar: AppBar(
+        toolbarHeight: 48,
         title: Text(l10n.settings),
         automaticallyImplyLeading: true,
       ),

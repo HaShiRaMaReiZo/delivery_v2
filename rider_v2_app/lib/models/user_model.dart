@@ -16,6 +16,8 @@ class UserModel {
   final DateTime updatedAt;
   final String? phone;
   final String role;
+  @JsonKey(name: 'rider_id')
+  final int? riderId;
   final RiderModel? rider;
 
   UserModel({
@@ -27,6 +29,7 @@ class UserModel {
     required this.updatedAt,
     this.phone,
     required this.role,
+    this.riderId,
     this.rider,
   });
 

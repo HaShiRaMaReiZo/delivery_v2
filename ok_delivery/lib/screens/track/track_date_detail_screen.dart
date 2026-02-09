@@ -85,6 +85,7 @@ class _TrackDateDetailScreenState extends State<TrackDateDetailScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        toolbarHeight: 48,
       ),
       body: _packages.isEmpty
           ? const Center(

@@ -7,8 +7,11 @@ A comprehensive delivery management system with web and mobile applications for 
 ```
 deli/
 ├── deli_backend/          # Laravel backend API
+├── location_tracker_js/   # Node.js Socket.io server for real-time rider location
 ├── rider_app/             # Flutter rider mobile app
-└── merchant_app/          # Flutter merchant mobile app
+├── rider_v2_app/          # Flutter rider app (updated)
+├── merchant_app/          # Flutter merchant mobile app
+└── ok_delivery/           # Flutter merchant/customer app
 ```
 
 ## Components

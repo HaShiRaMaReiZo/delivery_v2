@@ -20,3 +20,9 @@ class LocationErrorEvent extends LocationEvent {
 
   const LocationErrorEvent(this.error);
 }
+
+class LocationUpdatePackageIdEvent extends LocationEvent {
+  final int? packageId;
+
+  const LocationUpdatePackageIdEvent(this.packageId);
+}
