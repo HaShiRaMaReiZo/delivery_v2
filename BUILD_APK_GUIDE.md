@@ -1,6 +1,6 @@
 # How to Build APK Files for Flutter Apps
 
-Complete guide for building APK files for `merchant_app` and `rider_app`.
+Complete guide for building APK files for `ok_delivery` (merchant app) and `rider_v2_app` (rider app).
 
 ## Prerequisites
 
@@ -17,27 +17,27 @@ Complete guide for building APK files for `merchant_app` and `rider_app`.
 
 ## Quick Build Commands
 
-### For Merchant App
+### For Merchant App (ok_delivery)
 
 ```bash
-cd merchant_app
+cd ok_delivery
 flutter clean
 flutter pub get
 flutter build apk
 ```
 
-**Output location:** `merchant_app/build/app/outputs/flutter-apk/app-release.apk`
+**Output location:** `ok_delivery/build/app/outputs/flutter-apk/app-release.apk`
 
-### For Rider App
+### For Rider App (rider_v2_app)
 
 ```bash
-cd rider_app
+cd rider_v2_app
 flutter clean
 flutter pub get
 flutter build apk
 ```
 
-**Output location:** `rider_app/build/app/outputs/flutter-apk/app-release.apk`
+**Output location:** `rider_v2_app/build/app/outputs/flutter-apk/app-release.apk`
 
 ---
 
@@ -45,14 +45,14 @@ flutter build apk
 
 ### Step 1: Navigate to App Directory
 
-**For Merchant App:**
+**For Merchant App (ok_delivery):**
 ```powershell
-cd C:\Users\HP\OneDrive\Desktop\deli\merchant_app
+cd C:\Users\HP\OneDrive\Desktop\deli\ok_delivery
 ```
 
-**For Rider App:**
+**For Rider App (rider_v2_app):**
 ```powershell
-cd C:\Users\HP\OneDrive\Desktop\deli\rider_app
+cd C:\Users\HP\OneDrive\Desktop\deli\rider_v2_app
 ```
 
 ### Step 2: Clean Previous Builds (Optional but Recommended)
@@ -334,8 +334,8 @@ Typical APK sizes:
 
 After building, APK files are located at:
 
-- **Merchant App:** `merchant_app/build/app/outputs/flutter-apk/app-release.apk`
-- **Rider App:** `rider_app/build/app/outputs/flutter-apk/app-release.apk`
+- **Merchant App (ok_delivery):** `ok_delivery/build/app/outputs/flutter-apk/app-release.apk`
+- **Rider App (rider_v2_app):** `rider_v2_app/build/app/outputs/flutter-apk/app-release.apk`
 
 ---
 

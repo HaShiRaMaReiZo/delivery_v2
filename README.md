@@ -2,55 +2,51 @@
 
 A comprehensive delivery management system with web and mobile applications for managing packages, riders, and deliveries.
 
+## Current architecture (what you use today)
+
+| Role | App / Service | Purpose |
+|------|----------------|--------|
+| **Frontend (mobile)** | **ok_delivery** | Merchant/customer app: register packages, drafts, track deliveries, live map |
+| **Frontend (mobile)** | **rider_v2_app** | Rider app: assignments, update status, location, proof, COD |
+| **API + Admin web** | **deli_backend** | Laravel API (`/api/*`) + office admin (Blade: dashboard, packages, riders, map, register user) |
+| **Real-time** | **location_tracker_js** | Node.js Socket.io server for live rider location (used by backend map + ok_delivery) |
+
+- **ok_delivery** and **rider_v2_app** both call the same backend: `https://ok-delivery-service.onrender.com` (deli_backend).
+- **deli_backend** serves the **REST API** for the apps and the **admin web UI** (office login, dashboard, packages, riders, map, etc.) at the same domain.
+
 ## Project Structure
 
 ```
 deli/
-├── deli_backend/          # Laravel backend API
-├── location_tracker_js/   # Node.js Socket.io server for real-time rider location
-├── rider_app/             # Flutter rider mobile app
-├── rider_v2_app/          # Flutter rider app (updated)
-├── merchant_app/          # Flutter merchant mobile app
-└── ok_delivery/           # Flutter merchant/customer app
+├── deli_backend/          # Laravel: API + office admin web
+├── location_tracker_js/   # Node.js Socket.io – real-time rider location
+├── ok_delivery/           # Flutter merchant/customer app
+└── rider_v2_app/          # Flutter rider app
 ```
 
 ## Components
 
-### 1. Backend API (`deli_backend/`)
-Laravel 11 REST API for package management, rider assignments, and real-time tracking.
+### 1. Backend API + Admin Web (`deli_backend/`)
+Laravel 11: **REST API** for mobile apps and **office admin** (web).
 
-**Features:**
-- Package registration and tracking
-- Rider assignment and location tracking
-- Office web interface
-- Real-time notifications
-- COD collection tracking
+**API** (`/api/*`): auth, merchant packages/drafts, rider packages/location, office packages/riders.
 
-**Documentation:**
-- [Backend README](./deli_backend/README.md)
-- [Deployment Guide](./deli_backend/DEPLOYMENT.md)
+**Admin web** (Blade, `/office/*`): login, dashboard, packages, riders, map, register user. Used by office staff / super admin.
 
-### 2. Rider App (`rider_app/`)
-Flutter mobile application for delivery riders.
+**Documentation:** [Backend README](./deli_backend/README.md), [Deployment](./deli_backend/DEPLOYMENT.md).
 
-**Features:**
-- View assigned packages
-- Update package status
-- Location tracking
-- COD collection
-- Delivery proof upload
+### 2. Merchant / Customer App (`ok_delivery/`)
+Flutter app for merchants: register packages, drafts, track packages, live tracking map (Socket.io).
 
-### 3. Merchant App (`merchant_app/`)
-Flutter mobile application for merchants to register and track packages.
+### 3. Rider App (`rider_v2_app/`)
+Flutter app for riders: view assignments, update status, send location to location_tracker_js, proof, COD.
 
-**Features:**
-- Package registration
-- Package tracking
-- Delivery status updates
+### 4. Location tracker (`location_tracker_js/`)
+Node.js + Socket.io. Riders send location here; office map and ok_delivery consume live location.
 
 ## Quick Start
 
-### Backend Setup
+### Backend (API + admin web)
 ```bash
 cd deli_backend
 composer install
@@ -60,26 +56,27 @@ php artisan migrate
 php artisan db:seed --class=OfficeUserSeeder
 php artisan serve
 ```
+Then open `http://localhost:8000` for office login and admin.
 
-### Rider App Setup
+### Merchant app (ok_delivery)
 ```bash
-cd rider_app
+cd ok_delivery
 flutter pub get
 flutter run
 ```
 
-### Merchant App Setup
+### Rider app (rider_v2_app)
 ```bash
-cd merchant_app
+cd rider_v2_app
 flutter pub get
 flutter run
 ```
 
 ## Deployment
 
-See [Backend Deployment Guide](./deli_backend/DEPLOYMENT.md) for deploying to Render.
+See [Backend Deployment Guide](./deli_backend/DEPLOYMENT.md) for deploying to Render. Frontend apps (ok_delivery, rider_v2_app) point to the deployed backend URL in their `api_endpoints.dart`.
 
-## Default Credentials
+## Default Credentials (office admin web)
 
 **Super Admin (Office):**
 - Email: `erickboyle@superadmin.com`
@@ -89,9 +86,9 @@ See [Backend Deployment Guide](./deli_backend/DEPLOYMENT.md) for deploying to Re
 
 ## Technology Stack
 
-- **Backend**: Laravel 11, PHP 8.2, MySQL
-- **Mobile**: Flutter, Dart
-- **Real-time**: WebSocket (Pusher)
+- **Backend**: Laravel 11, PHP 8.2+ (API + Blade admin)
+- **Mobile**: Flutter (ok_delivery, rider_v2_app)
+- **Real-time**: Socket.io (location_tracker_js)
 - **Deployment**: Docker, Render
 
 ## License
