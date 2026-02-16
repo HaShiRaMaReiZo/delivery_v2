@@ -99,11 +99,6 @@ Route::get('/seed-users', function () {
 			'success' => true,
 			'message' => 'Users seeded successfully!',
 			'output' => $output,
-			'users' => [
-				'Super Admin: erickboyle@superadmin.com / erick2004',
-				'Office Manager: manager@delivery.com / manager123',
-				'Office Staff: staff@delivery.com / staff123'
-			]
 		]);
 	} catch (\Exception $e) {
 		return response()->json([

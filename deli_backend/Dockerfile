@@ -34,8 +34,8 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Expose port (Render will provide PORT env variable)
-EXPOSE 8000
+# Expose port (Fly.io uses 8080; Render/local use PORT env)
+EXPOSE 8080
 
 # Use entrypoint script
 ENTRYPOINT ["docker-entrypoint.sh"]

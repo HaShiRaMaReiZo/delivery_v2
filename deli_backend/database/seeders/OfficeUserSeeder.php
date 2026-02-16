@@ -9,53 +9,51 @@ use Illuminate\Support\Facades\Hash;
 class OfficeUserSeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Seed office users. In production set SEEDER_* env vars; locally uses dev defaults.
      */
     public function run(): void
     {
-        // Create Super Admin
+        $superAdminPassword = env('SEEDER_SUPER_ADMIN_PASSWORD', 'change-me');
+        $managerPassword = env('SEEDER_OFFICE_MANAGER_PASSWORD', 'change-me');
+        $staffPassword = env('SEEDER_OFFICE_STAFF_PASSWORD', 'change-me');
+
         User::firstOrCreate(
-            ['email' => 'erickboyle@superadmin.com'],
+            ['email' => env('SEEDER_SUPER_ADMIN_EMAIL', 'admin@example.com')],
             [
                 'name' => 'Super Admin',
-                'email' => 'erickboyle@superadmin.com',
-                'password' => Hash::make('erick2004'),
+                'email' => env('SEEDER_SUPER_ADMIN_EMAIL', 'admin@example.com'),
+                'password' => Hash::make($superAdminPassword),
                 'role' => 'super_admin',
                 'status' => 'active',
-                'phone' => '+1234567890',
+                'phone' => env('SEEDER_SUPER_ADMIN_PHONE', '+1234567890'),
             ]
         );
 
-        // Create Office Manager
         User::firstOrCreate(
-            ['email' => 'manager@delivery.com'],
+            ['email' => env('SEEDER_MANAGER_EMAIL', 'manager@example.com')],
             [
                 'name' => 'Office Manager',
-                'email' => 'manager@delivery.com',
-                'password' => Hash::make('manager123'),
+                'email' => env('SEEDER_MANAGER_EMAIL', 'manager@example.com'),
+                'password' => Hash::make($managerPassword),
                 'role' => 'office_manager',
                 'status' => 'active',
-                'phone' => '+1234567891',
+                'phone' => env('SEEDER_MANAGER_PHONE', '+1234567891'),
             ]
         );
 
-        // Create Office Staff
         User::firstOrCreate(
-            ['email' => 'staff@delivery.com'],
+            ['email' => env('SEEDER_STAFF_EMAIL', 'staff@example.com')],
             [
                 'name' => 'Office Staff',
-                'email' => 'staff@delivery.com',
-                'password' => Hash::make('staff123'),
+                'email' => env('SEEDER_STAFF_EMAIL', 'staff@example.com'),
+                'password' => Hash::make($staffPassword),
                 'role' => 'office_staff',
                 'status' => 'active',
-                'phone' => '+1234567892',
+                'phone' => env('SEEDER_STAFF_PHONE', '+1234567892'),
             ]
         );
 
-        $this->command->info('Office users created successfully!');
-        $this->command->info('Super Admin: erickboyle@superadmin.com / erick2004');
-        $this->command->info('Office Manager: manager@delivery.com / manager123');
-        $this->command->info('Office Staff: staff@delivery.com / staff123');
+        $this->command->info('Office users created. Set SEEDER_* env vars in production.');
     }
 }
 

@@ -1,208 +1,138 @@
 # Deli Backend
 
-Laravel backend API for the Deli delivery management system. Handles package management, rider assignments, status tracking, and real-time notifications.
+Laravel API and office admin web app for the Deli delivery system. **Hosting:** web app on [Render](https://render.com), database on [Supabase](https://supabase.com) (PostgreSQL).
 
-## Features
+---
 
-- 📦 Package management (registration, tracking, status updates)
-- 🚴 Rider assignment and tracking
-- 🏢 Office web interface for package management
-- 📱 RESTful API for mobile applications (Rider & Merchant apps)
-- 🔔 Real-time notifications via WebSocket
-- 💰 COD (Cash on Delivery) collection tracking
-- 📍 Location tracking for riders
-- 🔐 Authentication and authorization
+## Stack
 
-## Tech Stack
+- **Laravel** (PHP 8.2+) – API + Blade office UI  
+- **Database** – Supabase PostgreSQL (no MySQL)  
+- **Storage** – Supabase Storage (package images)  
+- **Deploy** – Docker on Render  
 
-- **Framework**: Laravel 11
-- **Database**: MySQL
-- **Real-time**: WebSocket (Pusher/Broadcasting)
-- **Storage**: Supabase Storage (for package images with auto-cleanup)
-- **Deployment**: Docker on Render
+---
 
-## Project Structure
+## Local setup
 
-```
-deli_backend/
-├── app/
-│   ├── Http/Controllers/    # API and Web controllers
-│   ├── Models/              # Eloquent models
-│   ├── Services/            # Business logic services
-│   └── Events/              # Event classes
-├── database/
-│   ├── migrations/          # Database migrations
-│   └── seeders/             # Database seeders
-├── routes/
-│   ├── api.php              # API routes
-│   └── web.php              # Web routes
-├── resources/views/         # Blade templates
-└── public/                  # Public assets
-```
+### 1. Clone and install
 
-## Installation
-
-### Prerequisites
-
-- PHP 8.2+
-- Composer
-- MySQL 8.0+
-- Node.js & NPM (for frontend assets)
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd deli_backend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   composer install
-   npm install
-   ```
-
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   php artisan key:generate
-   ```
-
-4. **Update `.env` file**
-   ```env
-   DB_CONNECTION=mysql
-   DB_HOST=127.0.0.1
-   DB_PORT=3306
-   DB_DATABASE=deli_db
-   DB_USERNAME=your_username
-   DB_PASSWORD=your_password
-   ```
-
-5. **Run migrations and seeders**
-   ```bash
-   php artisan migrate
-   php artisan db:seed --class=OfficeUserSeeder
-   ```
-
-6. **Start development server**
-   ```bash
-   php artisan serve
-   ```
-
-## Default Admin Credentials
-
-After seeding:
-- **Email**: `erickboyle@superadmin.com`
-- **Password**: `erick2004`
-
-⚠️ **Change these credentials in production!**
-
-## API Documentation
-
-### Base URL
-- **Local**: `http://localhost:8000/api`
-- **Production**: `https://your-domain.com/api`
-
-### Authentication
-Most endpoints require authentication via Bearer token (Sanctum).
-
-### Key Endpoints
-
-#### Office Web App
-- `GET /office/packages` - List packages
-- `POST /office/packages/assign` - Assign package to rider
-- `POST /office/packages/bulk-assign` - Bulk assign packages
-
-#### Rider API
-- `GET /api/rider/packages` - Get rider's assignments
-- `POST /api/rider/packages/{id}/status` - Update package status
-- `POST /api/rider/packages/{id}/receive` - Receive package from office
-- `POST /api/rider/packages/{id}/start-delivery` - Start delivery
-- `POST /api/rider/packages/{id}/collect-cod` - Collect COD payment
-
-#### Merchant API
-- `POST /api/merchant/packages` - Register new package
-- `GET /api/merchant/packages` - List merchant's packages
-
-## Package Status Flow
-
-```
-registered → assigned_to_rider → picked_up → on_the_way → delivered
-                ↓
-         ready_for_delivery → on_the_way → delivered
-                ↓
-         cancelled → return_to_office → returned_to_merchant
-                ↓
-         contact_failed → arrived_at_office (auto-reassign)
-```
-
-## Deployment
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment guide to Render.
-
-Quick steps:
-1. Push code to GitHub
-2. Create MySQL database on Render (or external)
-3. Create Web Service on Render (Docker runtime)
-4. Configure environment variables
-5. Deploy!
-
-## Development
-
-### Running Tests
 ```bash
-php artisan test
+git clone https://github.com/HaShiRaMaReiZo/deli_backend.git
+cd deli_backend
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-### Code Style
-```bash
-./vendor/bin/phpcs
-```
+### 2. Database (Supabase)
 
-### Database Migrations
-```bash
-# Create migration
-php artisan make:migration create_table_name
+Create a project on [Supabase](https://supabase.com), then in **Project Settings → Database** get:
 
-# Run migrations
-php artisan migrate
+- Connection: use **Session pooler** (IPv4-friendly)
+- Host, Port (6543), Database (`postgres`), User (`postgres.<project-ref>`), Password
 
-# Rollback
-php artisan migrate:rollback
-```
-
-## Environment Variables
-
-Key environment variables:
+Put them in `.env`:
 
 ```env
-APP_NAME=Deli
-APP_ENV=local
-APP_KEY=
-APP_DEBUG=true
-APP_URL=http://localhost:8000
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=deli_db
-DB_USERNAME=root
-DB_PASSWORD=
-
-BROADCAST_DRIVER=pusher
-CACHE_DRIVER=file
-SESSION_DRIVER=file
-QUEUE_CONNECTION=sync
+DB_CONNECTION=pgsql
+DB_HOST=<pooler-host>
+DB_PORT=6543
+DB_DATABASE=postgres
+DB_USERNAME=postgres.<project-ref>
+DB_PASSWORD=<your-password>
+DB_SSLMODE=require
 ```
+
+See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for details.
+
+### 3. Optional: Supabase Storage + location tracker
+
+For package images and live map:
+
+```env
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_KEY=<anon-or-service-role-key>
+SUPABASE_BUCKET=package-images
+LOCATION_TRACKER_URL=https://your-location-tracker-url
+```
+
+### 4. Run migrations and seed
+
+```bash
+php artisan migrate
+php artisan db:seed --class=OfficeUserSeeder
+```
+
+For production, set strong passwords via env (see [Security](#security)).
+
+### 5. Start server
+
+```bash
+php artisan serve
+```
+
+- API: `http://localhost:8000/api`  
+- Office admin: `http://localhost:8000/office`  
+
+---
+
+## Deploy to Render (web) + Supabase (DB)
+
+1. **Database:** Use your existing Supabase project (or create one). No Render database.
+2. **Web service:** On [Render](https://render.com), create a **Web Service** from this repo.
+   - **Root directory:** (repo root)
+   - **Runtime:** Docker  
+   - **Plan:** Free or paid
+3. **Environment:** In Render, set all variables from [.env.example](./.env.example). Required: `APP_KEY`, `APP_URL`, `DB_*`, `SUPABASE_URL`, `SUPABASE_KEY`, `PORT=8000`. See [RENDER_DEPLOY_SUPABASE.md](./RENDER_DEPLOY_SUPABASE.md).
+4. Deploy. Your app URL will be like `https://deli-backend.onrender.com`.
+
+---
+
+## Security
+
+- **Never commit `.env`** – it’s in `.gitignore`. Use `.env.example` as a template.
+- **Secrets** – Set `APP_KEY`, `DB_PASSWORD`, `SUPABASE_KEY` only in environment (Render dashboard or local `.env`).
+- **Office users** – In production, set `SEEDER_SUPER_ADMIN_PASSWORD`, `SEEDER_OFFICE_MANAGER_PASSWORD`, `SEEDER_OFFICE_STAFF_PASSWORD` (and optional `SEEDER_*_EMAIL`) before running the seeder. Locally the seeder uses safe defaults.
+- **Debug routes** – `/check-schema` and `/seed-users` are disabled in production unless `ENABLE_DEBUG_ROUTES` is set.
+
+---
+
+## Project layout
+
+```
+app/Http/Controllers/Api/   # API (auth, merchant, rider, office)
+app/Http/Controllers/Web/   # Office Blade (login, dashboard, packages, riders, map)
+app/Models/                 # Eloquent models
+app/Services/               # SupabaseStorageService, etc.
+config/                     # Laravel config
+database/migrations/        # PostgreSQL migrations
+database/seeders/           # OfficeUserSeeder
+routes/api.php              # API routes
+routes/web.php              # Web + office routes
+resources/views/office/      # Office admin Blade views
+```
+
+---
+
+## API overview
+
+- **Auth:** `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/user`, `POST /api/auth/logout`
+- **Merchant:** `GET/POST /api/merchant/packages`, drafts, live location
+- **Rider:** `GET/PUT /api/rider/packages`, status, proof, COD, `POST /api/rider/location`
+- **Office:** (web UI at `/office`; API under `role:office_*`)
+
+All API routes (except register/login) use **Bearer token** (Laravel Sanctum).
+
+---
+
+## Docs
+
+- [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) – Database on Supabase  
+- [RENDER_DEPLOY_SUPABASE.md](./RENDER_DEPLOY_SUPABASE.md) – Deploy web app on Render with Supabase  
+
+---
 
 ## License
 
-MIT License
-
-## Support
-
-For issues or questions, please check:
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment guide
-- Render logs for production issues
-- Laravel documentation: https://laravel.com/docs
+MIT

@@ -1,10 +1,10 @@
+# Deli backend – Laravel API + office admin. Database = Supabase (no Render DB needed).
 services:
   - type: web
     name: deli-backend
     env: docker
     region: oregon
     plan: free
-    # Build and start commands are handled by Dockerfile and docker-entrypoint.sh
     envVars:
       - key: APP_ENV
         value: production
@@ -13,16 +13,9 @@ services:
       - key: LOG_LEVEL
         value: error
       - key: DB_CONNECTION
-        value: mysql
+        value: pgsql
+      - key: DB_SSLMODE
+        value: require
       - key: LOCATION_TRACKER_URL
         value: https://location-tracker-js.onrender.com
-      # Add other environment variables in Render dashboard:
-      # APP_KEY, DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD, etc.
-
-databases:
-  - name: deli-mysql-database
-    databaseName: deli_db
-    user: deli_user
-    plan: free
-    region: oregon
-    databaseType: mysql
+      # Set in Render Dashboard → Environment (secrets): APP_KEY, APP_URL, DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD, SUPABASE_URL, SUPABASE_KEY, SUPABASE_BUCKET

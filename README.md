@@ -33,7 +33,7 @@ Laravel 11: **REST API** for mobile apps and **office admin** (web).
 
 **Admin web** (Blade, `/office/*`): login, dashboard, packages, riders, map, register user. Used by office staff / super admin.
 
-**Documentation:** [Backend README](./deli_backend/README.md), [Deployment](./deli_backend/DEPLOYMENT.md).
+**Documentation:** [Backend README](./deli_backend/README.md), [Deployment](./deli_backend/DEPLOYMENT.md), [Supabase database](./deli_backend/SUPABASE_SETUP.md), [Deploy on Fly.io](./deli_backend/DEPLOY_FLY.md).
 
 ### 2. Merchant / Customer App (`ok_delivery/`)
 Flutter app for merchants: register packages, drafts, track packages, live tracking map (Socket.io).

@@ -52,8 +52,7 @@ php artisan db:seed --class=OfficeUserSeeder --force || {
     echo "WARNING: Seeding failed. This might be normal if already seeded."
 }
 
-# Start PHP built-in server using PORT from environment (default to 8000)
-# Use php -S instead of artisan serve for better compatibility
+# Start PHP built-in server using PORT from environment (8000 local, 8080 on Fly.io)
 PORT=${PORT:-8000}
 echo "Starting PHP server on port $PORT..."
 
